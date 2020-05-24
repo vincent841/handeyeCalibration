@@ -87,6 +87,15 @@ def initializeRealsense():
     pipeline.start(config)
     return pipeline
 
+def getIntrinsicsMat(intrinsics):
+    mtx = np.array([[intrinsics.fx,             0, intrinsics.ppx],
+                    [            0, intrinsics.fy, intrinsics.ppy],
+                    [            0,             0,              1]])
+    
+    dist = np.array(intrinsics.coeffs[:4])
+
+    return mtx, dist
+
 # create a directory to save captured images 
 def makeFrameImageDirectory():
     now = datetime.datetime.now()
@@ -106,7 +115,7 @@ def drawAxis(img, corners, imgpts):
     img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (0,0,255), 5)
     return img
 
-def processCapture(color_image, dirFrameImage):
+def processCapture(color_image, dirFrameImage, mtx, dist):
     # save the current frame to a jpg file
     cv2.imwrite(os.path.join(dirFrameImage, str(iteration) + '.jpg'), color_image)
     print('Image caputured - ' + os.path.join(dirFrameImage, str(iteration) + '.jpg'))
@@ -167,7 +176,7 @@ if __name__ == '__main__':
     # intialize the robot
     print("Intialize the robot...")
     initialzeRobot(indy)
-    sleep(2)
+    sleep(1)
 
     # set direct-teaching mode on
     print("Entering HandEye Calibartion Mode with direct teaching mode...")
@@ -175,7 +184,7 @@ if __name__ == '__main__':
     sleep(1)
 
     # ready to capture frames for realsense camera
-    pipeline = initializeRealsense()
+    initializeRealsense()
 
     # create a directory to image files
     dirFrameImage = makeFrameImageDirectory()
@@ -188,6 +197,13 @@ if __name__ == '__main__':
             color_frame = frames.get_color_frame()
             if not color_frame:
                 continue
+
+            # Intrinsics & Extrinsics
+            depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+            color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
+            depth_to_color_extrin = depth_frame.profile.get_extrinsics_to(color_frame.profile)
+
+            mtx, dist = getIntrinsicsMat(rsIntrinsics)
             
             # Convert images to numpy arrays
             color_image = np.asanyarray(color_frame.get_data())        
@@ -202,7 +218,7 @@ if __name__ == '__main__':
             elif pressedKey == ord('p'):
                 indyPrintTaskPosition()
             elif pressedKey == ord('c'):
-                processCapture(color_image, dirFrameImage)
+                processCapture(color_image, dirFrameImage, mtx, dist)
     finally:
         # Stop streaming
         pipeline.stop()
