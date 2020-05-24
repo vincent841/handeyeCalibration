@@ -10,6 +10,20 @@ import UtilHM
 import os
 import CalibHandEye
 
+# set robot parameters
+_server_ip = "192.168.1.207"
+_name = "NRMK-Indy7"
+
+# set chessboard calibration parameters
+chessboardSize = [10, 7]
+objp = np.zeros((chessboardSize[1]*chessboardSize[0],3), np.float32)
+objp[:,:2] = np.mgrid[0:chessboardSize[0],0:chessboardSize[1]].T.reshape(-1,2)
+
+# create handeye calibration parameters
+HMRobotbaseToTCP = []
+HMCalibbaseToCam = []
+Cam3dCoord = []
+Robot3dCoord = []
 
 def indyConnect(servIP, connName):
     # Connect
@@ -54,6 +68,10 @@ def indyGetCurrentHMPose():
     task_pos = indy.get_task_pos()
     hm = UtilHM.convertHMtoXYZABCDeg(task_pos)
     return hm
+
+def indyGetTaskPose():
+    task_pos = indy.get_task_pos()
+    return task_pos    
     
 # # Get Task Position
 # print('### Test: GetTaskPos() ###')
@@ -80,8 +98,8 @@ def initializeRealsense():
     #Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
-    config.enable_stream(rs.stream.depth, 1280, 760, rs.format.z16, 30)
-    config.enable_stream(rs.stream.color, 1280, 760, rs.format.bgr8, 30)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
     # Start streaming
     pipeline.start(config)
@@ -115,7 +133,7 @@ def drawAxis(img, corners, imgpts):
     img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (0,0,255), 5)
     return img
 
-def processCapture(color_image, dirFrameImage, mtx, dist):
+def getCalibrationData(color_image, dirFrameImage, mtx, dist):
     # save the current frame to a jpg file
     cv2.imwrite(os.path.join(dirFrameImage, str(iteration) + '.jpg'), color_image)
     print('Image caputured - ' + os.path.join(dirFrameImage, str(iteration) + '.jpg'))
@@ -132,6 +150,7 @@ def processCapture(color_image, dirFrameImage, mtx, dist):
         # Find the rotation and translation vectors.
         _, rvec, tvec, inliers = cv2.solvePnPRansac(objp, corners2, mtx, dist)
 
+        #
         rotmat = np.zeros(shape=(3,3))
         cv2.Rodrigues(rvec, rotmat)
         hmCalToCam = makeHM(rotmat, tvec)
@@ -148,24 +167,46 @@ def processCapture(color_image, dirFrameImage, mtx, dist):
     else:
         print("Failed to capture an entire chessboard image. Please try to do it again..")
 
+def getCalibrationData2(color_image, mtx, dist):
+    # iteration 
+    checkPointCoord = np.array([[0, 0], [9, 6], [0, 6]])
+    checkPointIndex = np.array([0, 69, 60])
+
+    cam3DPoints = []
+    robot3DPoints = []
+    
+    # get the calibration pose
+    gray = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
+
+    # Find the chessboard corners
+    ret, corners = cv2.findChessboardCorners(gray, (chessboardSize[0], chessboardSize[1]), None)
+    if ret == True:
+        # fix the coordinates of corners
+        corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
+
+        for iter in range(0, 3):
+            print("move Robot to " + str(checkPointCoord[iter]) + " and any key ")
+            cv2.waitKey()
+
+            #depth = depth_frame.get_distance(corners2[0][0,0], corners2[0][0,1])
+            depth = depth_frame.get_distance(corners2[checkPointIndex[0]])
+            depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, corners2[checkPointIndex[0]], depth)
+            text = "Cam Coord: %.5lf, %.5lf, %.5lf\n" % (depth_point[0], depth_point[1], depth_point[2])                        # unit: mm
+            print(text)
+            cam3DPoints.append(depth_point)
+
+            currTaskPose = indyGetTaskPose()
+            print("Robot Coord: %.5lf, %.5lf, %.5lf\n" % (currTaskPose[0]*1000, currTaskPose[1]*1000, currTaskPose[2]*1000))
+            robot3DPoints.append(([currTaskPose[0]*1000, currTaskPose[1]*1000, currTaskPose[2]*1000]))
+    else:
+        print("Failed to capture an entire chessboard image. Please try to do it again..")
+
 ###############################################################################
 # Hand-eye calibration process 
 #   -                                                                
 ###############################################################################
+
 if __name__ == '__main__':
-
-    # set robot parameters
-    _server_ip = "192.168.1.207"
-    _name = "NRMK-Indy7"
-
-    # set chessboard calibration parameters
-    chessboardSize = [10, 7]
-    objp = np.zeros((chessboardSize[1]*chessboardSize[0],3), np.float32)
-    objp[:,:2] = np.mgrid[0:chessboardSize[0],0:chessboardSize[1]].T.reshape(-1,2)
-    
-    # set handeye calibration parameters
-    HMRobotbaseToTCP = []
-    HMCalibbaseToCam = []
 
     # connect to Indy
     indy = indyConnect(_server_ip, _name)
@@ -194,19 +235,25 @@ if __name__ == '__main__':
         while(True):
             # Wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
-            color_frame = frames.get_color_frame()
-            if not color_frame:
+
+            # Align the depth frame to color frame
+            aligned_frames = align.process(frames)
+
+            # Get aligned frames
+            aligned_depth_frame = aligned_frames.get_depth_frame() # aligned_depth_frame is a 640x480 depth image
+            color_frame = aligned_frames.get_color_frame()
+            if not aligned_depth_frame or not color_frame:
                 continue
 
             # Intrinsics & Extrinsics
             depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
             color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
             depth_to_color_extrin = depth_frame.profile.get_extrinsics_to(color_frame.profile)
-
             mtx, dist = getIntrinsicsMat(rsIntrinsics)
             
             # Convert images to numpy arrays
-            color_image = np.asanyarray(color_frame.get_data())        
+            color_image = np.asanyarray(color_frame.get_data())
+            depth_image = np.asanyarray(aligned_depth_frame.get_data())
             
             # display the captured image
             cv2.imshow('Capture Images',color_image)
@@ -218,7 +265,7 @@ if __name__ == '__main__':
             elif pressedKey == ord('p'):
                 indyPrintTaskPosition()
             elif pressedKey == ord('c'):
-                processCapture(color_image, dirFrameImage, mtx, dist)
+                getCalibrationData(color_image, dirFrameImage, mtx, dist)
     finally:
         # Stop streaming
         pipeline.stop()
