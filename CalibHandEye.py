@@ -8,8 +8,11 @@ t_gripper2base = []
 R_target2cam = []
 t_target2cam = []
 
+# opencv parameters
+criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
+
 # Ref) https://stackoverflow.com/questions/27546081/determining-a-homogeneous-affine-transformation-matrix-from-six-points-in-3d-usi
-def recover_homogenous_affine_transformation(p, p_prime):
+def calculateHM(p, p_prime):
     '''
     Find the unique homogeneous affine transformation that
     maps a set of 3 points to another set of 3 points in 3D
@@ -86,6 +89,9 @@ if __name__ == '__main__':
     YMLHMBase2TCPs = []
     YMLHMTarget2Cams = []
 
+    cam3DTestPoints = []
+    robot3DTestPoints = []
+
     handEyeInput = cv2.FileStorage("./handEyeSample.yml", cv2.FILE_STORAGE_READ)
     fileNode = handEyeInput.root()    
 
@@ -101,5 +107,16 @@ if __name__ == '__main__':
             YMLHMBase2TCPs.append(ymlmtx)
     
     calibrateHandEye(YMLHMBase2TCPs, YMLHMTarget2Cams, False)
-            
+
+
+    # calculateHM Test
+    cam3DTestPoints.append([-0.10259, 0.07283, 0.40900])
+    cam3DTestPoints.append([0.14604, 0.00431, 0.42700])
+    cam3DTestPoints.append([-0.00145, 0.10705, 0.31100])
+
+    robot3DTestPoints.append([-0.18101, -0.52507, 0.01393])
+    robot3DTestPoints.append([0.06137, -0.68306, 0.01546])
+    robot3DTestPoints.append([-0.18807, -0.66342, 0.01510])
+
+
 

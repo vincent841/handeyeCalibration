@@ -8,6 +8,7 @@ import cv2
 import math
 import UtilHM
 import os
+import datetime
 import CalibHandEye
 
 # set robot parameters
@@ -25,6 +26,9 @@ HMCalibbaseToCam = []
 Cam3dCoord = []
 Robot3dCoord = []
 
+# opencv parameters
+criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
+
 def indyConnect(servIP, connName):
     # Connect
     obj = indycli.IndyDCPClient(servIP, connName)
@@ -40,10 +44,12 @@ def initialzeRobot(indy):
     print("Resetting robot")
     print("is in resetting? ", status['resetting'])
     print("is robot ready? ", status['ready'])
-
+    if( status['direct_teaching'] == True):
+        indy.direct_teaching(False)
     if( status['emergency'] == True):
         indy.stop_emergency()
     sleep(5)
+    
     status = indy.get_robot_status()
     print("Reset robot done")
     print("is in resetting? ", status['resetting'])
@@ -60,13 +66,13 @@ def indyPrintTaskPosition():
     task_pos_mm = [task_pos[0]*1000.0, task_pos[1]*1000.0, task_pos[2]*1000.0,task_pos[3], task_pos[4], task_pos[5]]
     print ("Task Pos: ")
     print (task_pos_mm) 
-    hm = UtilHM.convertHMtoXYZABCDeg(task_pos)
+    hm = UtilHM.convertXYZABCtoHMDeg(task_pos)
     print("Homogeneous Matrix: ")
     print(hm)
 
 def indyGetCurrentHMPose():
     task_pos = indy.get_task_pos()
-    hm = UtilHM.convertHMtoXYZABCDeg(task_pos)
+    hm = UtilHM.convertXYZABCtoHMDeg(task_pos)
     return hm
 
 def indyGetTaskPose():
@@ -167,7 +173,7 @@ def getCalibrationData(color_image, dirFrameImage, mtx, dist):
     else:
         print("Failed to capture an entire chessboard image. Please try to do it again..")
 
-def getCalibrationData2(color_image, mtx, dist):
+def getCalibrationData2(color_image, depth_frame):
     # iteration 
     checkPointCoord = np.array([[0, 0], [9, 6], [0, 6]])
     checkPointIndex = np.array([0, 69, 60])
@@ -188,16 +194,16 @@ def getCalibrationData2(color_image, mtx, dist):
             print("move Robot to " + str(checkPointCoord[iter]) + " and any key ")
             cv2.waitKey()
 
-            #depth = depth_frame.get_distance(corners2[0][0,0], corners2[0][0,1])
-            depth = depth_frame.get_distance(corners2[checkPointIndex[0]])
-            depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, corners2[checkPointIndex[0]], depth)
+            depth = depth_frame.get_distance(corners2[checkPointIndex[iter]][0,0], corners2[checkPointIndex[iter]][0,1])
+            #depth = depth_frame.get_distance(corners2[checkPointIndex[0]])
+            depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [corners2[checkPointIndex[iter]][0,0], corners2[checkPointIndex[iter]][0,1]], depth)
             text = "Cam Coord: %.5lf, %.5lf, %.5lf\n" % (depth_point[0], depth_point[1], depth_point[2])                        # unit: mm
             print(text)
             cam3DPoints.append(depth_point)
 
             currTaskPose = indyGetTaskPose()
-            print("Robot Coord: %.5lf, %.5lf, %.5lf\n" % (currTaskPose[0]*1000, currTaskPose[1]*1000, currTaskPose[2]*1000))
-            robot3DPoints.append(([currTaskPose[0]*1000, currTaskPose[1]*1000, currTaskPose[2]*1000]))
+            print("Robot Coord: %.5lf, %.5lf, %.5lf\n" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
+            robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
     else:
         print("Failed to capture an entire chessboard image. Please try to do it again..")
 
@@ -225,10 +231,14 @@ if __name__ == '__main__':
     sleep(1)
 
     # ready to capture frames for realsense camera
-    initializeRealsense()
+    pipeline = initializeRealsense()
 
     # create a directory to image files
     dirFrameImage = makeFrameImageDirectory()
+
+    # creates an align object
+    align_to = rs.stream.color
+    align = rs.align(align_to)
 
     # start to capture frames and process a key event
     try:
@@ -246,10 +256,10 @@ if __name__ == '__main__':
                 continue
 
             # Intrinsics & Extrinsics
-            depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+            depth_intrin = aligned_depth_frame.profile.as_video_stream_profile().intrinsics
             color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
-            depth_to_color_extrin = depth_frame.profile.get_extrinsics_to(color_frame.profile)
-            mtx, dist = getIntrinsicsMat(rsIntrinsics)
+            depth_to_color_extrin = aligned_depth_frame.profile.get_extrinsics_to(color_frame.profile)
+            mtx, dist = getIntrinsicsMat(color_intrin)
             
             # Convert images to numpy arrays
             color_image = np.asanyarray(color_frame.get_data())
@@ -265,15 +275,16 @@ if __name__ == '__main__':
             elif pressedKey == ord('p'):
                 indyPrintTaskPosition()
             elif pressedKey == ord('c'):
-                getCalibrationData(color_image, dirFrameImage, mtx, dist)
+                getCalibrationData2(color_image, aligned_depth_frame)
+                #getCalibrationData(color_image, dirFrameImage, mtx, dist)
     finally:
         # Stop streaming
         pipeline.stop()
 
     indy.direct_teaching(False)
 
-    CalibHandEye.calibrateHandEye(HMRobotbaseToTCP, HMCalibbaseToCam, False)
-    print("Calibration Finished")
+    # CalibHandEye.calibrateHandEye(HMRobotbaseToTCP, HMCalibbaseToCam, False)
+    # print("Calibration Finished")
     
     # exit
     cv2.destroyAllWindows()
