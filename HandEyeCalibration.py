@@ -204,8 +204,25 @@ def getCalibrationData2(color_image, depth_frame):
             currTaskPose = indyGetTaskPose()
             print("Robot Coord: %.5lf, %.5lf, %.5lf\n" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
             robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
+
+        # finally, we try to get HM here
+        camC = np.array( ((cam3DPoints[0]), (cam3DPoints[1]), (cam3DPoints[2])) )
+        print(camC.shape)
+        robotC = np.array( ((robot3DPoints[0]), (robot3DPoints[1]), (robot3DPoints[2])) )
+        result = CalibHandEye.calculateHM(camC, robotC)
+        print("HM = ")
+        print(result)   
+        saveCamToGripper(result)
     else:
         print("Failed to capture an entire chessboard image. Please try to do it again..")
+
+
+
+def saveCamToGripper(cam2calHM):
+    calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_WRITE)
+    calibFile.write("cam2calHM", cam2calHM)
+    calibFile.release()
+ 
 
 ###############################################################################
 # Hand-eye calibration process 
@@ -277,6 +294,27 @@ if __name__ == '__main__':
             elif pressedKey == ord('c'):
                 getCalibrationData2(color_image, aligned_depth_frame)
                 #getCalibrationData(color_image, dirFrameImage, mtx, dist)
+            elif pressedKey == ord('g'):
+                depth2 = aligned_depth_frame.get_distance(320, 260)
+                depth_point2 = rs.rs2_deproject_pixel_to_point(depth_intrin, [320, 260], depth2)
+                print("%.5lf, %.5lf, %.5lf\n" % (depth_point2[0], depth_point2[1], depth_point2[2]))
+
+                depth = aligned_depth_frame.get_distance(320, 400)
+                depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [320, 400], depth)
+                print("%.5lf, %.5lf, %.5lf\n" % (depth_point[0], depth_point[1], depth_point[2]))
+
+                calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_READ)
+                hmnode = calibFile.getNode("cam2calHM")
+                hmmtx = hmnode.mat()
+
+                camcord = np.array(((depth_point2[0], depth_point2[1], depth_point2[2], 1)))
+                gcoord = np.dot(camcord, hmmtx)
+                print(gcoord)
+
+                camcord = np.array(((depth_point[0], depth_point[1], depth_point[2], 1)))
+                gcoord = np.dot(camcord, hmmtx)
+                print(gcoord)
+                
     finally:
         # Stop streaming
         pipeline.stop()

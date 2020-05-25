@@ -44,8 +44,13 @@ def calculateHM(p, p_prime):
     R = np.dot(np.linalg.inv(np.row_stack((Q, np.cross(*Q)))),
                np.row_stack((Q_prime, np.cross(*Q_prime))))
 
+    print("R: ")
+    print(R)
+
     # calculate translation vector
     t = p_prime[0] - np.dot(p[0], R)
+    print("t: ")
+    print(t)
 
     # calculate affine transformation matrix
     return np.column_stack((np.row_stack((R, t)),
@@ -117,6 +122,18 @@ if __name__ == '__main__':
     robot3DTestPoints.append([-0.18101, -0.52507, 0.01393])
     robot3DTestPoints.append([0.06137, -0.68306, 0.01546])
     robot3DTestPoints.append([-0.18807, -0.66342, 0.01510])
+
+    result = calculateHM(np.array(((-0.10259, 0.07283, 0.40900),(0.14604, 0.00431, 0.42700), (-0.00145, 0.10705, 0.31100))), 
+    np.array(((-0.18101, -0.52507, 0.01393),(0.06137, -0.68306, 0.01546), (-0.18807, -0.66342, 0.01510)))
+    )
+    print(result)
+    print(result.shape)
+
+    camC = np.array( ((cam3DTestPoints[0]), (cam3DTestPoints[1]), (cam3DTestPoints[2])) )
+    print(camC.shape)
+    robotC = np.array( ((robot3DTestPoints[0]), (robot3DTestPoints[1]), (robot3DTestPoints[2])) )
+    result = calculateHM(camC, robotC)
+    print(result)
 
 
 
