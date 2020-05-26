@@ -243,8 +243,8 @@ if __name__ == '__main__':
     sleep(1)
 
     # set direct-teaching mode on
-    print("Entering HandEye Calibartion Mode with direct teaching mode...")
-    indy.direct_teaching(True)
+    # print("Entering HandEye Calibartion Mode with direct teaching mode...")
+    # indy.direct_teaching(True)
     sleep(1)
 
     # ready to capture frames for realsense camera
@@ -292,6 +292,10 @@ if __name__ == '__main__':
             elif pressedKey == ord('p'):
                 indyPrintTaskPosition()
             elif pressedKey == ord('c'):
+                # set direct-teaching mode on
+                print("Entering HandEye Calibartion Mode with direct teaching mode...")
+                indy.direct_teaching(True)
+                sleep(1)
                 getCalibrationData2(color_image, aligned_depth_frame)
                 #getCalibrationData(color_image, dirFrameImage, mtx, dist)
             elif pressedKey == ord('g'):
@@ -314,7 +318,30 @@ if __name__ == '__main__':
                 camcord = np.array(((depth_point[0], depth_point[1], depth_point[2], 1)))
                 gcoord = np.dot(camcord, hmmtx)
                 print(gcoord)
-                
+            elif pressedKey == ord('t'):
+                inputX = input("X: ")
+                inputY = input("Y: ")
+
+                curr_task_pos = indy.get_task_pos()
+                print("curr: ")
+                print(curr_task_pos)
+                depth = aligned_depth_frame.get_distance(int(inputX), int(inputY))
+                depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [int(inputX), int(inputY)], depth)
+
+                calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_READ)
+                hmnode = calibFile.getNode("cam2calHM")
+                hmmtx = hmnode.mat()
+
+                camcord = np.array(((depth_point[0], depth_point[1], depth_point[2], 1)))
+                gcoord = np.dot(camcord, hmmtx)
+                print(gcoord)
+                indy.task_move_to([gcoord[0], gcoord[1], gcoord[2], curr_task_pos[3], curr_task_pos[4], curr_task_pos[5]])
+
+                # indy.task_move_by([0.1, 0, 0, 0, 0, 0])
+                # indy.wait_for_move_finish()
+                # indy.task_move_by([0.0, 0.1, 0, 0, 0, 0])
+                #indy.task_move_by([0.0, 0.1, 0, 0, 0, 0])
+
     finally:
         # Stop streaming
         pipeline.stop()
