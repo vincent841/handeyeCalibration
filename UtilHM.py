@@ -71,9 +71,15 @@ def inverseHM(H):
 
     HMInv = np.zeros([4, 4], dtype=np.float64)
     HMInv[0:3, 0:3] = rot.T
-    HMInv[0:3, 3] = np.dot(rot.T, trs)
+    HMInv[0:3, 3] = (-1)*np.dot(rot.T, trs)
     HMInv[3, 0:4] = [0, 0, 0, 1]
     return HMInv
+
+def invH(H):
+    Hout = H.T
+    Hout[3,0:3] = np.zeros([[0,0,0]])
+    Hout[0:3,3] = (Hout[0:3,0:3]*H[0:3,3])*(-1)
+    return Hout    
 
 def makeHM(rot, trans):
     HM = np.zeros([4, 4], dtype=np.float64)
