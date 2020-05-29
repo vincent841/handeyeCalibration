@@ -10,6 +10,7 @@ import UtilHM
 import os
 import datetime
 import CalibHandEye
+import cv2.aruco as aruco
 
 # set robot parameters
 _server_ip = "192.168.1.207"
@@ -25,6 +26,9 @@ HMRobotbaseToTCP = []
 HMCalibbaseToCam = []
 Cam3dCoord = []
 Robot3dCoord = []
+
+cam3DPoints = []
+robot3DPoints = []
 
 # opencv parameters
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
@@ -63,12 +67,12 @@ def indyPrintJointPosition():
 
 def indyPrintTaskPosition():
     task_pos = indy.get_task_pos()
-    task_pos_mm = [task_pos[0]*1000.0, task_pos[1]*1000.0, task_pos[2]*1000.0,task_pos[3], task_pos[4], task_pos[5]]
+    task_pos_mm = [task_pos[0], task_pos[1], task_pos[2],task_pos[3], task_pos[4], task_pos[5]]
     print ("Task Pos: ")
     print (task_pos_mm) 
-    hm = UtilHM.convertXYZABCtoHMDeg(task_pos)
-    print("Homogeneous Matrix: ")
-    print(hm)
+    # hm = UtilHM.convertXYZABCtoHMDeg(task_pos)
+    # print("Homogeneous Matrix: ")
+    # print(hm)
 
 def indyGetCurrentHMPose():
     task_pos = indy.get_task_pos()
@@ -178,9 +182,6 @@ def getCalibrationData2(color_image, depth_frame):
     checkPointCoord = np.array([[0, 0], [9, 6], [0, 6]])
     checkPointIndex = np.array([0, 69, 60])
 
-    cam3DPoints = []
-    robot3DPoints = []
-    
     # get the calibration pose
     gray = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
 
@@ -218,11 +219,38 @@ def getCalibrationData2(color_image, depth_frame):
 
 
 
+
 def saveCamToGripper(cam2calHM):
     calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_WRITE)
     calibFile.write("cam2calHM", cam2calHM)
     calibFile.release()
  
+
+def mouseEventCallback(event, x, y, flags, param):
+    aligned_depth_frame = param
+    if(event == cv2.EVENT_LBUTTONUP):
+        print("-------------------------------------------------------")
+        print("Event... " + str(x) + " , " + str(y))
+
+        # get a camera-based coordinates
+        depth = aligned_depth_frame.get_distance(int(x), int(y))
+        depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [int(x), int(y)], depth)
+
+        # get a transformation matrix
+        calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_READ)
+        hmnode = calibFile.getNode("cam2calHM")
+        hmmtx = hmnode.mat()
+        print("Transform Matrix: ")
+        print(hmmtx)
+        
+        camcord = np.array(((depth_point[0], depth_point[1], depth_point[2], 1)))
+        text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
+        print(text)
+
+        gcoord = np.dot(camcord, hmmtx)
+        print("Robot Coord: ")
+        print(gcoord)
+
 
 ###############################################################################
 # Hand-eye calibration process 
@@ -251,11 +279,13 @@ if __name__ == '__main__':
     pipeline = initializeRealsense()
 
     # create a directory to image files
-    dirFrameImage = makeFrameImageDirectory()
+    #dirFrameImage = makeFrameImageDirectory()
 
     # creates an align object
     align_to = rs.stream.color
     align = rs.align(align_to)
+
+    cv2.namedWindow('Capture Images')
 
     # start to capture frames and process a key event
     try:
@@ -281,9 +311,67 @@ if __name__ == '__main__':
             # Convert images to numpy arrays
             color_image = np.asanyarray(color_frame.get_data())
             depth_image = np.asanyarray(aligned_depth_frame.get_data())
+
+            # operations on the frame
+            gray = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
+
+            # set dictionary size depending on the aruco marker selected
+            aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_1000)
+
+            # detector parameters can be set here (List of detection parameters[3])
+            parameters = aruco.DetectorParameters_create()
+            parameters.adaptiveThreshConstant = 10
+
+            aruco_list = {}
+
+            # lists of ids and the corners belonging to each id
+            corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+
+            # check if the ids list is not empty
+            # if no check is added the code will crash
+            if np.all(ids != None):
+                # get the center of an Aruco Makers
+                if len(corners):
+                    for k in range(len(corners)):
+                        temp_1 = corners[k]
+                        temp_1 = temp_1[0]
+                        temp_2 = ids[k]
+                        temp_2 = temp_2[0]
+                        aruco_list[temp_2] = temp_1
+                key_list = aruco_list.keys()
+                for key in key_list:
+                    dict_entry = aruco_list[key]    
+                    centre = dict_entry[0] + dict_entry[1] + dict_entry[2] + dict_entry[3]
+                    centre[:] = [int(x / 4) for x in centre]
+                    orient_centre = centre + [0.0,5.0]
+                    centre = tuple(centre)  
+                    orient_centre = tuple((dict_entry[0]+dict_entry[1])/2)
+                    cv2.circle(color_image,centre,1,(0,0,255), -1)
+
+                # # estimate pose of each marker and return the values
+                # # rvet and tvec-different from camera coefficients
+                rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.05, mtx, dist)
+                # #(rvec-tvec).any() # get rid of that nasty numpy value array error
+
+                # for i in range(0, ids.size):
+                #     # draw axis for the aruco markers
+                #     aruco.drawAxis(color_image, mtx, dist, rvec[i], tvec[i], 0.1)
+
+                # draw a square around the markers
+                aruco.drawDetectedMarkers(color_image, corners)
+
+                # code to show ids of the marker found
+                strg = ''
+                for i in range(0, ids.size):
+                    strg += str(ids[i][0])+', '
+            else:
+                # code to show 'No Ids' when no markers are found
+                #cv2.putText(frame, "No Ids", (0,64), font, 1, (0,255,0),2,cv2.LINE_AA)
+                pass   
             
             # display the captured image
             cv2.imshow('Capture Images',color_image)
+            cv2.setMouseCallback('Capture Images', mouseEventCallback, aligned_depth_frame)
 
             # handle key inputs
             pressedKey = (cv2.waitKey(1) & 0xFF)
@@ -292,12 +380,47 @@ if __name__ == '__main__':
             elif pressedKey == ord('p'):
                 indyPrintTaskPosition()
             elif pressedKey == ord('c'):
+                print("---------------------------------------------------------------")
+                depth = aligned_depth_frame.get_distance(centre[0], centre[1])
+                depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centre[0], centre[1]], depth)
+                text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
+                print(text)
+                cam3DPoints.append(depth_point)
+
+                print("tvec: ")
+                print(tvec[0])
+
+                currTaskPose = indyGetTaskPose()
+                print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
+                robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
+            
+            elif pressedKey == ord('r'):
+                # finally, we try to get HM here
+                camC = np.array( ((cam3DPoints[0]), (cam3DPoints[1]), (cam3DPoints[2])) )
+                print(camC.shape)
+                robotC = np.array( ((robot3DPoints[0]), (robot3DPoints[1]), (robot3DPoints[2])) )
+                result = CalibHandEye.calculateHM(camC, robotC)
+                print("Transform Matrix = ")
+                print(result)   
+                saveCamToGripper(result)         
+
+            elif pressedKey == ord('x'):
+                 getCalibrationData2(color_image, aligned_depth_frame)
+                #getCalibrationData(color_image, dirFrameImage, mtx, dist)
+
+            elif pressedKey == ord('d'):
                 # set direct-teaching mode on
                 print("Entering HandEye Calibartion Mode with direct teaching mode...")
                 indy.direct_teaching(True)
                 sleep(1)
-                getCalibrationData2(color_image, aligned_depth_frame)
-                #getCalibrationData(color_image, dirFrameImage, mtx, dist)
+
+            elif pressedKey == ord('f'):
+                # set direct-teaching mode on
+                print("Entering HandEye Calibartion Mode with direct teaching mode...")
+                indy.direct_teaching(False)
+          
+
+
             elif pressedKey == ord('g'):
                 depth2 = aligned_depth_frame.get_distance(320, 260)
                 depth_point2 = rs.rs2_deproject_pixel_to_point(depth_intrin, [320, 260], depth2)
@@ -335,7 +458,7 @@ if __name__ == '__main__':
                 camcord = np.array(((depth_point[0], depth_point[1], depth_point[2], 1)))
                 gcoord = np.dot(camcord, hmmtx)
                 print(gcoord)
-                indy.task_move_to([gcoord[0], gcoord[1], gcoord[2], curr_task_pos[3], curr_task_pos[4], curr_task_pos[5]])
+                #indy.task_move_to([gcoord[0], gcoord[1], gcoord[2], curr_task_pos[3], curr_task_pos[4], curr_task_pos[5]])
 
                 # indy.task_move_by([0.1, 0, 0, 0, 0, 0])
                 # indy.wait_for_move_finish()

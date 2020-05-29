@@ -37,16 +37,18 @@ while (True):
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
     #print(ids)
 
+
     # font for displaying text (below)
     font = cv2.FONT_HERSHEY_SIMPLEX
 
     # check if the ids list is not empty
     # if no check is added the code will crash
     if np.all(ids != None):
+        corners2 = cv2.cornerSubPix(gray,corners[0],(11,11),(-1,-1),criteria)
 
         # # estimate pose of each marker and return the values
         # # rvet and tvec-different from camera coefficients
-        rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.05, mtx, dist)
+        rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners2, 0.05, mtx, dist)
         # #(rvec-tvec).any() # get rid of that nasty numpy value array error
 
         for i in range(0, ids.size):

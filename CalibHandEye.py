@@ -12,6 +12,7 @@ t_target2cam = []
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
 
 # Ref) https://stackoverflow.com/questions/27546081/determining-a-homogeneous-affine-transformation-matrix-from-six-points-in-3d-usi
+#      https://math.stackexchange.com/questions/222113/given-3-points-of-a-rigid-body-in-space-how-do-i-find-the-corresponding-orienta/222170#222170
 def calculateHM(p, p_prime):
     '''
     Find the unique homogeneous affine transformation that
@@ -55,6 +56,9 @@ def calculateHM(p, p_prime):
     # calculate affine transformation matrix
     return np.column_stack((np.row_stack((R, t)),
                             (0, 0, 0, 1)))
+
+# def calculateHM(p, p_prime):
+#     cv2.solve()
 
 def calibrateHandEye(HMBase2TCPs, HMTarget2Cams, HandInEye=True):
     #assert (HMBase2TCPs.len() == HMTarget2Cams.len())
