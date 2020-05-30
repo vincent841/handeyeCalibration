@@ -13,7 +13,7 @@ criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)      
 
 # Ref) https://stackoverflow.com/questions/27546081/determining-a-homogeneous-affine-transformation-matrix-from-six-points-in-3d-usi
 #      https://math.stackexchange.com/questions/222113/given-3-points-of-a-rigid-body-in-space-how-do-i-find-the-corresponding-orienta/222170#222170
-def calculateHM(p, p_prime):
+def calculateTransformMatrixUsing3Points(p, p_prime):
     # construct intermediate matrix
     Q       = p[1:]       - p[0]
     Q_prime = p_prime[1:] - p_prime[0]
@@ -32,7 +32,6 @@ def calculateHM(p, p_prime):
 def calculateTransformMatrix(srcPoints, dstPoints):
     assert(len(srcPoints) == len(dstPoints))
 
-    
     p = np.ones([len(srcPoints), 4])
     p_prime = np.ones([len(dstPoints), 4])
     for idx in range(len(srcPoints)):

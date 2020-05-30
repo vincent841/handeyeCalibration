@@ -247,21 +247,14 @@ if __name__ == '__main__':
     initialzeRobot(indy)
     sleep(1)
 
-    # set direct-teaching mode on
-    # print("Entering HandEye Calibartion Mode with direct teaching mode...")
-    # indy.direct_teaching(True)
-    sleep(1)
-
     # ready to capture frames for realsense camera
     pipeline = initializeRealsense()
 
-    # create a directory to image files
-    #dirFrameImage = makeFrameImageDirectory()
-
-    # creates an align object
+    # create an align object
     align_to = rs.stream.color
     align = rs.align(align_to)
 
+    # create a window to display video frames
     cv2.namedWindow('Capture Images')
 
     # create a variable for frame indexing
@@ -275,7 +268,7 @@ if __name__ == '__main__':
         dcnode = calibFile.getNode("distCoeff")
         dist = dcnode.mat()
 
-    # start to capture frames and process a key event
+    # get frames and process a key event
     try:
         while(True):
             # Wait for a coherent pair of frames: depth and color
@@ -311,32 +304,12 @@ if __name__ == '__main__':
             parameters = aruco.DetectorParameters_create()
             parameters.adaptiveThreshConstant = 10
 
-            aruco_list = {}
-
             # lists of ids and the corners belonging to each id
             corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
             # check if the ids list is not empty
             # if no check is added the code will crash
             if np.all(ids != None):
-                # get the center of an Aruco Makers
-                # if len(corners):
-                #     for k in range(len(corners)):
-                #         temp_1 = corners[k]
-                #         temp_1 = temp_1[0]
-                #         temp_2 = ids[k]
-                #         temp_2 = temp_2[0]
-                #         aruco_list[temp_2] = temp_1
-                # key_list = aruco_list.keys()
-                # for key in key_list:
-                #     dict_entry = aruco_list[key]    
-                #     centre = dict_entry[0] + dict_entry[1] + dict_entry[2] + dict_entry[3]
-                #     centre[:] = [int(x / 4) for x in centre]
-                #     orient_centre = centre + [0.0,5.0]
-                #     centre = tuple(centre)  
-                #     orient_centre = tuple((dict_entry[0]+dict_entry[1])/2)
-                #     #cv2.circle(color_image,centre,1,(0,0,255), -1)
-
                 # estimate pose of each marker and return the values
                 # rvet and tvec-different from camera coefficients
                 rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.05, mtx, dist)
@@ -345,14 +318,14 @@ if __name__ == '__main__':
                 if((rvec[0].shape == (1,3)) or (rvec[0].shape == (3,1))):
                     inputObjPts = np.float32([[0.0,0.0,0.0]]).reshape(-1,3)
                     imgpts, jac = cv2.projectPoints(inputObjPts, rvec[0], tvec[0], mtx, dist)
-                    centre = tuple(imgpts[0][0])
-                    cv2.circle(color_image,centre,1,(0,0,255), -1)
+                    centerPoint = tuple(imgpts[0][0])
+                    cv2.circle(color_image,centerPoint,1,(0,0,255), -1)
                     
                 #(rvec-tvec).any() # get rid of that nasty numpy value array error
 
                 # for i in range(0, ids.size):
                     # draw axis for the aruco markers
-                    # aruco.drawAxis(color_image, mtx, dist, rvec[i], tvec[i], 0.1p)
+                    # aruco.drawAxis(color_image, mtx, dist, rvec[i], tvec[i], 0.1)
 
                 # draw a square around the markers
                 aruco.drawDetectedMarkers(color_image, corners)
@@ -372,7 +345,6 @@ if __name__ == '__main__':
                 statusDT = "On" if(robotStatus['direct_teaching'] == True) else "Off"
                 text = "Direct Teaching Mode: " + statusDT
                 drawText(color_image, text, (5, 20))
-
             
             # display the captured image
             cv2.imshow('Capture Images',color_image)
@@ -390,42 +362,39 @@ if __name__ == '__main__':
                 robot3DPoints.clear()
             elif pressedKey == ord('c'):
                 print("---------------------------------------------------------------")
-                depth = aligned_depth_frame.get_distance(centre[0], centre[1])
-                depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centre[0], centre[1]], depth)
+                depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
+                depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
                 text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
                 print(text)
                 cam3DPoints.append(depth_point)
                 currTaskPose = indyGetTaskPose()
                 print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
                 robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
-            
             elif pressedKey == ord('r'):
-                # finally, we try to get HM here
+                # finally, we try to get a transformation matrix here
                 # camC = np.array( ((cam3DPoints[0]), (cam3DPoints[1]), (cam3DPoints[2])) )
                 # print(camC.shape)
                 # robotC = np.array( ((robot3DPoints[0]), (robot3DPoints[1]), (robot3DPoints[2])) )
-                # result = CalibHandEye.calculateHM(camC, robotC)
+                # result = CalibHandEye.calculateTransformMatrixUsing3Points(camC, robotC)
                 result = CalibHandEye.calculateTransformMatrix(cam3DPoints, robot3DPoints)
                 print("Transform Matrix = ")
                 print(result)   
                 saveTransformMatrix(result[1])         
-
             elif pressedKey == ord('d'):
                 # set direct-teaching mode on
-                print("Entering HandEye Calibartion Mode with direct teaching mode...")
+                print("direct teaching mode: On")
                 indy.direct_teaching(True)
                 sleep(1)
-
             elif pressedKey == ord('f'):
-                # set direct-teaching mode on
-                print("Entering HandEye Calibartion Mode with direct teaching mode...")
+                # set direct-teaching mode off
+                print("direct teaching mode: Off")
                 indy.direct_teaching(False)
         idxFrame += 1
     finally:
         # Stop streaming
         pipeline.stop()
 
-
+    # direct teaching mode is disalbe before exit
     robotStatus = indy.get_robot_status()
     if( robotStatus['direct_teaching'] == True):
         indy.direct_teaching(False)
