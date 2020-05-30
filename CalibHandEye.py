@@ -14,29 +14,6 @@ criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)      
 # Ref) https://stackoverflow.com/questions/27546081/determining-a-homogeneous-affine-transformation-matrix-from-six-points-in-3d-usi
 #      https://math.stackexchange.com/questions/222113/given-3-points-of-a-rigid-body-in-space-how-do-i-find-the-corresponding-orienta/222170#222170
 def calculateHM(p, p_prime):
-    '''
-    Find the unique homogeneous affine transformation that
-    maps a set of 3 points to another set of 3 points in 3D
-    space:
-
-        p_prime == np.dot(p, R) + t
-
-    where `R` is an unknown rotation matrix, `t` is an unknown
-    translation vector, and `p` and `p_prime` are the original
-    and transformed set of points stored as row vectors:
-
-        p       = np.array((p1,       p2,       p3))
-        p_prime = np.array((p1_prime, p2_prime, p3_prime))
-
-    The result of this function is an augmented 4-by-4
-    matrix `A` that represents this affine transformation:
-
-        np.column_stack((p_prime, (1, 1, 1))) == \
-            np.dot(np.column_stack((p, (1, 1, 1))), A)
-
-    Source: https://math.stackexchange.com/a/222170 (robjohn)
-    '''
-
     # construct intermediate matrix
     Q       = p[1:]       - p[0]
     Q_prime = p_prime[1:] - p_prime[0]
@@ -45,24 +22,33 @@ def calculateHM(p, p_prime):
     R = np.dot(np.linalg.inv(np.row_stack((Q, np.cross(*Q)))),
                np.row_stack((Q_prime, np.cross(*Q_prime))))
 
-    print("R: ")
-    print(R)
-
     # calculate translation vector
     t = p_prime[0] - np.dot(p[0], R)
-    print("t: ")
-    print(t)
 
     # calculate affine transformation matrix
     return np.column_stack((np.row_stack((R, t)),
                             (0, 0, 0, 1)))
 
-# def calculateHM(p, p_prime):
-#     cv2.solve()
+def calculateTransformMatrix(srcPoints, dstPoints):
+    assert(len(srcPoints) == len(dstPoints))
+
+    
+    p = np.ones([len(srcPoints), 4])
+    p_prime = np.ones([len(dstPoints), 4])
+    for idx in range(len(srcPoints)):
+        p[idx][0] = srcPoints[idx][0]
+        p[idx][1] = srcPoints[idx][1]
+        p[idx][2] = srcPoints[idx][2]
+
+        p_prime[idx][0] = dstPoints[idx][0]
+        p_prime[idx][1] = dstPoints[idx][1]
+        p_prime[idx][2] = dstPoints[idx][2]
+
+    trMatrix = cv2.solve(p, p_prime, flags=cv2.DECOMP_SVD)
+    return trMatrix
 
 def calibrateHandEye(HMBase2TCPs, HMTarget2Cams, HandInEye=True):
     #assert (HMBase2TCPs.len() == HMTarget2Cams.len())
-
     for hmmat in HMBase2TCPs:
         if(HandInEye == True):
             hmmat = UtilHM.inverseHM(hmmat)
@@ -118,11 +104,17 @@ if __name__ == '__main__':
     calibrateHandEye(YMLHMBase2TCPs, YMLHMTarget2Cams, False)
 
 
-    # calculateHM Test
+    # # calculateHM Test
+    cam3DTestPoints.append([-0.10259, 0.07283, 0.40900])
+    cam3DTestPoints.append([0.14604, 0.00431, 0.42700])
+    cam3DTestPoints.append([-0.00145, 0.10705, 0.31100])
     cam3DTestPoints.append([-0.10259, 0.07283, 0.40900])
     cam3DTestPoints.append([0.14604, 0.00431, 0.42700])
     cam3DTestPoints.append([-0.00145, 0.10705, 0.31100])
 
+    robot3DTestPoints.append([-0.18101, -0.52507, 0.01393])
+    robot3DTestPoints.append([0.06137, -0.68306, 0.01546])
+    robot3DTestPoints.append([-0.18807, -0.66342, 0.01510])
     robot3DTestPoints.append([-0.18101, -0.52507, 0.01393])
     robot3DTestPoints.append([0.06137, -0.68306, 0.01546])
     robot3DTestPoints.append([-0.18807, -0.66342, 0.01510])
@@ -139,5 +131,9 @@ if __name__ == '__main__':
     result = calculateHM(camC, robotC)
     print(result)
 
+    result = calculateHM2(cam3DTestPoints, robot3DTestPoints)
+    print(result)
+
+    print(np.dot(np.array([-0.10259, 0.07283, 0.40900, 1]).reshape(1,4), result[1]))
 
 
