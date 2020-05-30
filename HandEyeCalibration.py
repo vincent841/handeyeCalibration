@@ -181,9 +181,9 @@ def findTransformMatrix(color_image, dirFrameImage, mtx, dist):
         HMCalibbaseToCam.append(hmCalToCam)
 
         # (Optional) project 3D points to image plane
-        #imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, mtx, dist)
-        #img = drawAxis(color_image, corners2, imgpts)
-        #cv2.imshow('Images with Axis',img)
+        # imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, mtx, dist)
+        # img = drawAxis(color_image, corners2, imgpts)
+        # cv2.imshow('Images with Axis',img)
 
         # get the current robot pose
         hmpose = indyGetCurrentHMPose()
@@ -320,31 +320,39 @@ if __name__ == '__main__':
             # if no check is added the code will crash
             if np.all(ids != None):
                 # get the center of an Aruco Makers
-                if len(corners):
-                    for k in range(len(corners)):
-                        temp_1 = corners[k]
-                        temp_1 = temp_1[0]
-                        temp_2 = ids[k]
-                        temp_2 = temp_2[0]
-                        aruco_list[temp_2] = temp_1
-                key_list = aruco_list.keys()
-                for key in key_list:
-                    dict_entry = aruco_list[key]    
-                    centre = dict_entry[0] + dict_entry[1] + dict_entry[2] + dict_entry[3]
-                    centre[:] = [int(x / 4) for x in centre]
-                    orient_centre = centre + [0.0,5.0]
-                    centre = tuple(centre)  
-                    orient_centre = tuple((dict_entry[0]+dict_entry[1])/2)
-                    cv2.circle(color_image,centre,1,(0,0,255), -1)
+                # if len(corners):
+                #     for k in range(len(corners)):
+                #         temp_1 = corners[k]
+                #         temp_1 = temp_1[0]
+                #         temp_2 = ids[k]
+                #         temp_2 = temp_2[0]
+                #         aruco_list[temp_2] = temp_1
+                # key_list = aruco_list.keys()
+                # for key in key_list:
+                #     dict_entry = aruco_list[key]    
+                #     centre = dict_entry[0] + dict_entry[1] + dict_entry[2] + dict_entry[3]
+                #     centre[:] = [int(x / 4) for x in centre]
+                #     orient_centre = centre + [0.0,5.0]
+                #     centre = tuple(centre)  
+                #     orient_centre = tuple((dict_entry[0]+dict_entry[1])/2)
+                #     #cv2.circle(color_image,centre,1,(0,0,255), -1)
 
                 # estimate pose of each marker and return the values
                 # rvet and tvec-different from camera coefficients
                 rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.05, mtx, dist)
+
+                # get the center of an Aruco Makers
+                if((rvec[0].shape == (1,3)) or (rvec[0].shape == (3,1))):
+                    inputObjPts = np.float32([[0.0,0.0,0.0]]).reshape(-1,3)
+                    imgpts, jac = cv2.projectPoints(inputObjPts, rvec[0], tvec[0], mtx, dist)
+                    centre = tuple(imgpts[0][0])
+                    cv2.circle(color_image,centre,1,(0,0,255), -1)
+                    
                 #(rvec-tvec).any() # get rid of that nasty numpy value array error
 
                 # for i in range(0, ids.size):
-                #     # draw axis for the aruco markers
-                #     aruco.drawAxis(color_image, mtx, dist, rvec[i], tvec[i], 0.1)
+                    # draw axis for the aruco markers
+                    # aruco.drawAxis(color_image, mtx, dist, rvec[i], tvec[i], 0.1p)
 
                 # draw a square around the markers
                 aruco.drawDetectedMarkers(color_image, corners)
