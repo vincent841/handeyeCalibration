@@ -13,7 +13,7 @@ import CalibHandEye
 import cv2.aruco as aruco
 
 # calibration parameters
-UseRealSenseInternalMatrix = True
+UseRealSenseInternalMatrix = False
 VideoFrameWidth = 640
 VideoFrameHeight = 480
 VideoFramePerSec = 30
@@ -292,6 +292,7 @@ def mouseEventCallback(event, x, y, flags, param):
         text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
         print(text)
 
+        #robotCoord = np.dot(hmmtx, camCoord)
         robotCoord = np.dot(hmmtx, camCoord)
         
         # task_pos = indy.get_task_pos()
@@ -373,7 +374,7 @@ if __name__ == '__main__':
             gray = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
 
             # set dictionary size depending on the aruco marker selected
-            aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_250)
+            aruco_dict = aruco.Dictionary_get(aruco.DICT_5X5_250)
 
             # detector parameters can be set here (List of detection parameters[3])
             parameters = aruco.DetectorParameters_create()
@@ -387,7 +388,7 @@ if __name__ == '__main__':
             if np.all(ids != None):
                 # estimate pose of each marker and return the values
                 # rvet and tvec-different from camera coefficients
-                rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.1 , mtx, dist)   # 0.1: 10cm
+                rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.048, mtx, dist)   # 0.1: 10cm
 
                 # get the center of an Aruco Makers
                 if((rvec[0].shape == (1,3)) or (rvec[0].shape == (3,1))):

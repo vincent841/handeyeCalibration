@@ -103,16 +103,17 @@ def findCam2TCPMatrixUsingOpenCV():
         print("Distance: %f" % math.sqrt(math.pow(t_cam2gripper[0], 2.0)+math.pow(t_cam2gripper[1], 2.0)+math.pow(t_cam2gripper[2], 2.0)))
         print("--------------------------------------")
 
-    #if(mth == cv2.CALIB_HAND_EYE_HORAUD):
-    for idx in range(len(R_gripper2base)):
-        print("######")
-        hmT2G = UtilHM.makeHM(R_cam2gripper, t_cam2gripper.T)
-        hmG2B = UtilHM.makeHM(R_gripper2base[idx], t_gripper2base[idx].reshape(1,3))
-        hmC2T = UtilHM.makeHM(R_target2cam[idx], t_target2cam[idx].reshape(1,3))
-        #hmTransform = hmT2G
-        hmTransform = np.dot(hmG2B, hmT2G)
-        hmTransform = np.dot(hmTransform, hmC2T)
-        print(hmTransform)
+    if(mth == cv2.CALIB_HAND_EYE_HORAUD):
+        for idx in range(len(R_gripper2base)):
+            print("######")
+            hmT2G = UtilHM.makeHM(R_cam2gripper, t_cam2gripper.T)
+            hmG2B = UtilHM.makeHM(R_gripper2base[idx], t_gripper2base[idx].reshape(1,3))
+            hmC2T = UtilHM.makeHM(R_target2cam[idx], t_target2cam[idx].reshape(1,3))
+            hmC2T = UtilHM.inverseHM(hmC2T) # test
+            hmTransform = hmT2G
+            #hmTransform = np.dot(hmG2B, hmT2G)
+            #hmTransform = np.dot(hmTransform, hmC2T)
+            print(hmTransform)
 
     # hmT2G = UtilHM.makeHM(R_cam2gripper, t_cam2gripper.T)
     # hmG2B = UtilHM.makeHM(R_gripper2base[0], t_gripper2base[0].reshape(1,3))
