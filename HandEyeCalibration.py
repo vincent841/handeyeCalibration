@@ -275,7 +275,7 @@ def mouseEventCallback(event, x, y, flags, param):
         print("-------------------------------------------------------")
         print("RBTNUP Event... " + str(x) + " , " + str(y))
         
-        # get a camera-based coordinates of the current image pixel point
+        # get a camera-based coordinates for the current image pixel point
         depth = aligned_depth_frame.get_distance(int(x), int(y))
         depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [int(x), int(y)], depth)
 
@@ -481,6 +481,23 @@ if __name__ == '__main__':
                 print("Transform Matrix = ")
                 print(hmTransform)
                 saveTransformMatrix2(hmTransform)
+            elif pressedKey == ord('n'):
+                print("---------------------------------------------------------------")
+                # get a transformation matrix which was created by calibration process
+                calibFile = cv2.FileStorage("CalibResults2.xml", cv2.FILE_STORAGE_READ)
+                hmnode = calibFile.getNode("cam2calHM2")
+                hmmtx = hmnode.mat()
+                print("Transform matrix: ")
+                print(hmmtx)
+                print("Converted Coord: ")
+                tvecHm = np.array([tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], 1.0])
+                robotCoord = np.dot(hmmtx, tvecHm.T)
+                print(robotCoord)
+
+                curpos = indyGetTaskPose()
+                indy.task_move_to([robotCoord[0], robotCoord[1], curpos[2], curpos[3], curpos[4], curpos[5]])
+                print((robotCoord[0], robotCoord[1], robotCoord[2], curpos[3], curpos[4], curpos[5]))
+
             elif pressedKey == ord('r'):
                 # finally, we try to get a transformation matrix here
                 # camC = np.array( ((cam3DPoints[0]), (cam3DPoints[1]), (cam3DPoints[2])) )
@@ -499,60 +516,6 @@ if __name__ == '__main__':
                 # set direct-teaching mode off
                 print("direct teaching mode: Off")
                 indy.direct_teaching(False)
-            elif pressedKey == ord('+'):
-                calibPosList = [[0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.4, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.1, 0.0, 0.0, 0.0, 0.0],
-                                [0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, -0.2, 0.0, 0.0, 0.0, 0.0],
-                                [-0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.2, 0.0, 0.0, 0.0, 0.0, 0.0]]
-
-                initpos = indyGetTaskPose()
-
-                for pos in calibPosList:
-                    print(pos)
-                    indy.task_move_by(pos)
-                    indy.wait_for_move_finish()
-                    sleep(1.0)
-                    depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
-                    depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
-                    text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
-                    print(text)
-                    cam3DPoints.append(depth_point)
-                    currTaskPose = indyGetTaskPose()
-                    print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
-                    robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
-
-                indy.task_move_to(initpos)
-                indy.wait_for_move_finish()
-
-                # depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
-                # depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
-                # text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
-                # print(text)
-                # cam3DPoints.append(depth_point)
-                # currTaskPose = indyGetTaskPose()
-                # print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
-                # robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
-
-
-
-                # indy.task_move_by([-0.2, 0.0, 0.0, 0.0, 0.0, 0.0])
-                # indy.wait_for_move_finish()
-                # indy.task_move_by([0.0, 0.1, 0.0, 0.0, 0.0, 0.0])
-                # indy.wait_for_move_finish()
-                # indy.task_move_by([0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
-                # indy.wait_for_move_finish()
-                # indy.task_move_by([0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
-                # indy.wait_for_move_finish()
-                # indy.task_move_by([0.0, -0.2, 0.0, 0.0, 0.0, 0.0])
-                # indy.wait_for_move_finish()
-                # indy.task_move_by([-0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
-                # indy.wait_for_move_finish()
-                # indy.task_move_by([-0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
-                # indy.wait_for_move_finish()
-                # indy.task_move_to(initpos)
-                # indy.wait_for_move_finish()
-         
-
-
     finally:
         # direct teaching mode is disalbe before exit
         robotStatus = indy.get_robot_status()
@@ -562,9 +525,9 @@ if __name__ == '__main__':
         pipeline.stop()
 
     # direct teaching mode is disalbe before exit
-    robotStatus = indy.get_robot_status()
-    if( robotStatus['direct_teaching'] == True):
-        indy.direct_teaching(False)
+    # robotStatus = indy.get_robot_status()
+    # if( robotStatus['direct_teaching'] == True):
+    #     indy.direct_teaching(False)
     
     # exit
     cv2.destroyAllWindows()
