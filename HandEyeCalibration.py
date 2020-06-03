@@ -274,7 +274,7 @@ def mouseEventCallback(event, x, y, flags, param):
     if(event == cv2.EVENT_RBUTTONUP):
         print("-------------------------------------------------------")
         print("RBTNUP Event... " + str(x) + " , " + str(y))
-
+        
         # get a camera-based coordinates of the current image pixel point
         depth = aligned_depth_frame.get_distance(int(x), int(y))
         depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [int(x), int(y)], depth)
@@ -303,6 +303,32 @@ def mouseEventCallback(event, x, y, flags, param):
 
         print("Transfomred Robot-based Coordinate: ")
         print(robotCoord)
+
+'''
+        calibPosList = [[0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.4, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.1, 0.0, 0.0, 0.0, 0.0],
+                                [0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, -0.2, 0.0, 0.0, 0.0, 0.0],
+                                [-0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.2, 0.0, 0.0, 0.0, 0.0, 0.0]]
+
+        initpos = indyGetTaskPose()
+
+        for pos in calibPosList:
+            print(pos)
+            indy.task_move_by(pos)
+            indy.wait_for_move_finish()
+            sleep(1.0)
+            depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
+            depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
+            text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
+            print(text)
+            cam3DPoints.append(depth_point)
+            currTaskPose = indyGetTaskPose()
+            print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
+            robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
+
+        indy.task_move_to(initpos)
+        indy.wait_for_move_finish()
+'''
+
 
 ###############################################################################
 # Hand-eye calibration process 
@@ -474,8 +500,58 @@ if __name__ == '__main__':
                 print("direct teaching mode: Off")
                 indy.direct_teaching(False)
             elif pressedKey == ord('+'):
-                # get the current position
-                curpos = indyGetTaskPose()
+                calibPosList = [[0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.4, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.1, 0.0, 0.0, 0.0, 0.0],
+                                [0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, -0.2, 0.0, 0.0, 0.0, 0.0],
+                                [-0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.2, 0.0, 0.0, 0.0, 0.0, 0.0]]
+
+                initpos = indyGetTaskPose()
+
+                for pos in calibPosList:
+                    print(pos)
+                    indy.task_move_by(pos)
+                    indy.wait_for_move_finish()
+                    sleep(1.0)
+                    depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
+                    depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
+                    text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
+                    print(text)
+                    cam3DPoints.append(depth_point)
+                    currTaskPose = indyGetTaskPose()
+                    print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
+                    robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
+
+                indy.task_move_to(initpos)
+                indy.wait_for_move_finish()
+
+                # depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
+                # depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
+                # text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
+                # print(text)
+                # cam3DPoints.append(depth_point)
+                # currTaskPose = indyGetTaskPose()
+                # print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
+                # robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
+
+
+
+                # indy.task_move_by([-0.2, 0.0, 0.0, 0.0, 0.0, 0.0])
+                # indy.wait_for_move_finish()
+                # indy.task_move_by([0.0, 0.1, 0.0, 0.0, 0.0, 0.0])
+                # indy.wait_for_move_finish()
+                # indy.task_move_by([0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
+                # indy.wait_for_move_finish()
+                # indy.task_move_by([0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
+                # indy.wait_for_move_finish()
+                # indy.task_move_by([0.0, -0.2, 0.0, 0.0, 0.0, 0.0])
+                # indy.wait_for_move_finish()
+                # indy.task_move_by([-0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
+                # indy.wait_for_move_finish()
+                # indy.task_move_by([-0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
+                # indy.wait_for_move_finish()
+                # indy.task_move_to(initpos)
+                # indy.wait_for_move_finish()
+         
+
 
     finally:
         # direct teaching mode is disalbe before exit

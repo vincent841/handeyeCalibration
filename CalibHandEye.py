@@ -103,17 +103,26 @@ def findCam2TCPMatrixUsingOpenCV():
         print("Distance: %f" % math.sqrt(math.pow(t_cam2gripper[0], 2.0)+math.pow(t_cam2gripper[1], 2.0)+math.pow(t_cam2gripper[2], 2.0)))
         print("--------------------------------------")
 
-    if(mth == cv2.CALIB_HAND_EYE_HORAUD):
-        for idx in range(len(R_gripper2base)):
-            print("######")
-            hmT2G = UtilHM.makeHM(R_cam2gripper, t_cam2gripper.T)
-            hmG2B = UtilHM.makeHM(R_gripper2base[idx], t_gripper2base[idx].reshape(1,3))
-            hmC2T = UtilHM.makeHM(R_target2cam[idx], t_target2cam[idx].reshape(1,3))
-            hmC2T = UtilHM.inverseHM(hmC2T) # test
-            hmTransform = hmT2G
-            #hmTransform = np.dot(hmG2B, hmT2G)
-            #hmTransform = np.dot(hmTransform, hmC2T)
-            print(hmTransform)
+        if(mth == cv2.CALIB_HAND_EYE_HORAUD):
+            for idx in range(len(R_gripper2base)):
+                print("######")
+                hmT2G = UtilHM.makeHM(R_cam2gripper, t_cam2gripper.T)
+                hmG2B = UtilHM.makeHM(R_gripper2base[idx], t_gripper2base[idx].reshape(1,3))
+                hmC2T = UtilHM.makeHM(R_target2cam[idx], t_target2cam[idx].reshape(1,3))
+                #hmC2T = UtilHM.inverseHM(hmC2T) # test
+                hmTransform = hmT2G
+                #hmTransform = np.dot(hmG2B, hmT2G)
+                #hmTransform = np.dot(hmTransform, hmC2T)
+                print(hmTransform)
+                hmTransform2 = np.dot(hmG2B, hmT2G)
+                hmTransform2 = np.dot(hmTransform2, hmC2T)            
+                print("Checkpoint #1: ")
+                print(hmTransform2)
+                print("Checkpoint #2: ")
+                print(UtilHM.inverseHM(hmTransform2))
+                hmTransform3 = np.dot(UtilHM.inverseHM(hmC2T), UtilHM.inverseHM(hmT2G))
+                hmTransform3 = np.dot(hmTransform3, UtilHM.inverseHM(hmG2B))
+                print(hmTransform3)
 
     # hmT2G = UtilHM.makeHM(R_cam2gripper, t_cam2gripper.T)
     # hmG2B = UtilHM.makeHM(R_gripper2base[0], t_gripper2base[0].reshape(1,3))
