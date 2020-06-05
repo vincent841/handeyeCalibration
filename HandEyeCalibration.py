@@ -12,32 +12,22 @@ import datetime
 import CalibHandEye
 import cv2.aruco as aruco
 
-# calibration parameters
-UseRealSenseInternalMatrix = False
-VideoFrameWidth = 640
-VideoFrameHeight = 480
-VideoFramePerSec = 30
-
-# set robot parameters
+# robot parameters
 _server_ip = "192.168.1.207"
 _name = "NRMK-Indy7"
 
-# set chessboard calibration parameters
-chessboardSize = [10, 7]
-objp = np.zeros((chessboardSize[1]*chessboardSize[0],3), np.float32)
-objp[:,:2] = np.mgrid[0:chessboardSize[0],0:chessboardSize[1]].T.reshape(-1,2)
+# calibration parameters
+UseRealSenseInternalMatrix = True
+VideoFrameWidth = 1280
+VideoFrameHeight = 720
+VideoFramePerSec = 30
 
-# create handeye calibration parameters
-HMRobotbaseToTCP = []
-HMCalibbaseToCam = []
-Cam3dCoord = []
-Robot3dCoord = []
-
-cam3DPoints = []
-robot3DPoints = []
+# handeye calibration parameters
+#...
 
 # opencv parameters
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
+
 
 '''
 #####################################################################################
@@ -126,6 +116,7 @@ def convertIntrinsicsMat(intrinsics):
     return mtx, dist
 
 
+
 '''
 #####################################################################################
 Utility Functions
@@ -161,40 +152,6 @@ def drawText(img, text, imgpt):
 Transform Matrix Functions
 #####################################################################################
 '''
-def findTransformMatrix(color_image, dirFrameImage, mtx, dist):
-    # save the current frame to a jpg file
-    cv2.imwrite(os.path.join(dirFrameImage, str(iteration) + '.jpg'), color_image)
-    print('Image caputured - ' + os.path.join(dirFrameImage, str(iteration) + '.jpg'))
-
-    # get the calibration pose
-    gray = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
-
-    # Find the chessboard corners
-    ret, corners = cv2.findChessboardCorners(gray, (chessboardSize[0], chessboardSize[1]), None)
-    if ret == True:
-        # fix the coordinates of corenres
-        corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
-
-        # Find the rotation and translation vectors.
-        _, rvec, tvec, inliers = cv2.solvePnPRansac(objp, corners2, mtx, dist)
-
-        # convert Euler angles to Homogeneous matrix
-        rotmat = np.zeros(shape=(3,3))
-        cv2.Rodrigues(rvec, rotmat)
-        hmCalToCam = makeHM(rotmat, tvec)
-        HMCalibbaseToCam.append(hmCalToCam)
-
-        # (Optional) project 3D points to image plane
-        # imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, mtx, dist)
-        # img = drawAxis(color_image, corners2, imgpts)
-        # cv2.imshow('Images with Axis',img)
-
-        # get the current robot pose
-        hmpose = indyGetCurrentHMPose()
-        HMRobotbaseToTCP.append(hmpose)
-    else:
-        print("Failed to capture an entire chessboard image. Please try to do it again..")
-
 # save a transform matrix to xml data as a file
 def saveTransformMatrix(cam2calHM):
     calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_WRITE)
@@ -205,6 +162,8 @@ def saveTransformMatrix2(cam2calHM2):
     calibFile = cv2.FileStorage("CalibResults2.xml", cv2.FILE_STORAGE_WRITE)
     calibFile.write("cam2calHM2", cam2calHM2)
     calibFile.release()
+
+
 
 '''
 #####################################################################################
@@ -218,58 +177,9 @@ def mouseEventCallback(event, x, y, flags, param):
         print("-------------------------------------------------------")
         print("LBTNUP Event... " + str(x) + " , " + str(y))
 
-        # get a camera-based coordinates of the current image pixel point
-        depth = aligned_depth_frame.get_distance(int(x), int(y))
-        depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [int(x), int(y)], depth)
-
-        # get a transformation matrix which was created by calibration process
-        calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_READ)
-        hmnode = calibFile.getNode("cam2calHM")
-        hmmtx = hmnode.mat()
-
-        # print("Transform Matrix: ")
-        # print(hmmtx)
-        
-        # print a camera based coordi
-        camCoord = np.array(((depth_point[0], depth_point[1], depth_point[2], 1)))
-        text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
-        print(text)
-
-        robotCoord = np.dot(camCoord, hmmtx)
-        print("Transfomred Robot-based Coordinate: ")
-        print(robotCoord)
-
     if(event == cv2.EVENT_MBUTTONUP):
         print("-------------------------------------------------------")
         print("MBTNUP Event... " + str(x) + " , " + str(y))
-
-        # get a camera-based coordinates of the current image pixel point
-        depth = aligned_depth_frame.get_distance(int(x), int(y))
-        depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [int(x), int(y)], depth)
-
-        # get a transformation matrix which was created by calibration process
-        calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_READ)
-        hmnode = calibFile.getNode("cam2calHM")
-        hmmtx = hmnode.mat()
-
-        # print("Transform Matrix: ")
-        # print(hmmtx)
-        
-        # print a camera based coordi
-        camCoord = np.array(((depth_point[0], depth_point[1], depth_point[2], 1)))
-        text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
-        print(text)
-
-        if( ((depth_point[0] >= 0.0001) or (depth_point[0] <= -0.0001)) and 
-            ((depth_point[1] >= 0.0001) or (depth_point[1] <= -0.0001)) and
-            ((depth_point[2] >= 0.0001) or (depth_point[2] <= -0.0001)) ):
-            robotCoord = np.dot(camCoord, hmmtx)
-            print("Transfomred Robot-based Coordinate: ")
-            print(robotCoord)   
-
-            curpos = indyGetTaskPose()
-            indy.task_move_to([robotCoord[0], robotCoord[1], curpos[2], curpos[3], curpos[4], curpos[5]])
-            print((robotCoord[0], robotCoord[1], robotCoord[2], curpos[3], curpos[4], curpos[5]))
 
     if(event == cv2.EVENT_RBUTTONUP):
         print("-------------------------------------------------------")
@@ -294,40 +204,11 @@ def mouseEventCallback(event, x, y, flags, param):
 
         #robotCoord = np.dot(hmmtx, camCoord)
         robotCoord = np.dot(hmmtx, camCoord)
-        
-        # task_pos = indy.get_task_pos()
-        # hmmtx2 = UtilHM.convertXYZABCtoHMDeg(task_pos)
-        # hmmtx2 = UtilHM.inverseHM(hmmtx2)
-        # hmmtx = np.dot(hmmtx2, hmmtx)
-        # robotCoord = np.dot(hmmtx, camCoord)
 
         print("Transfomred Robot-based Coordinate: ")
         print(robotCoord)
 
-'''
-        calibPosList = [[0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.4, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.1, 0.0, 0.0, 0.0, 0.0],
-                                [0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, -0.2, 0.0, 0.0, 0.0, 0.0],
-                                [-0.2, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.2, 0.0, 0.0, 0.0, 0.0, 0.0]]
 
-        initpos = indyGetTaskPose()
-
-        for pos in calibPosList:
-            print(pos)
-            indy.task_move_by(pos)
-            indy.wait_for_move_finish()
-            sleep(1.0)
-            depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
-            depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
-            text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
-            print(text)
-            cam3DPoints.append(depth_point)
-            currTaskPose = indyGetTaskPose()
-            print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
-            robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
-
-        indy.task_move_to(initpos)
-        indy.wait_for_move_finish()
-'''
 
 
 ###############################################################################
@@ -352,14 +233,12 @@ if __name__ == '__main__':
     pipeline = initializeRealsense()
 
     # create an align object
-    align_to = rs.stream.color
-    align = rs.align(align_to)
+    align = rs.align(rs.stream.color)
 
     # create a window to display video frames
     cv2.namedWindow('Capture Images')
 
     # create a variable for frame indexing
-    idxFrame = 0
     flagFindAruco = False
 
     # use created camera matrix 
@@ -404,7 +283,8 @@ if __name__ == '__main__':
 
             # detector parameters can be set here (List of detection parameters[3])
             parameters = aruco.DetectorParameters_create()
-            parameters.adaptiveThreshConstant = 10
+            parameters.adaptiveThreshConstant = 7
+            #parameters.cornerRefinementMethod = CORNER_REFINE_SUBPIX
 
             # lists of ids and the corners belonging to each id
             corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
@@ -414,20 +294,21 @@ if __name__ == '__main__':
             if np.all(ids != None):
                 # estimate pose of each marker and return the values
                 # rvet and tvec-different from camera coefficients
-                rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.048, mtx, dist)   # 0.1: 10cm
+                rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.048, mtx, dist)
 
+                # TODO: consider how accurate the center point is as below.....
                 # get the center of an Aruco Makers
                 if((rvec[0].shape == (1,3)) or (rvec[0].shape == (3,1))):
                     inputObjPts = np.float32([[0.0,0.0,0.0]]).reshape(-1,3)
                     imgpts, jac = cv2.projectPoints(inputObjPts, rvec[0], tvec[0], mtx, dist)
                     centerPoint = tuple(imgpts[0][0])
                     cv2.circle(color_image,centerPoint,1,(0,0,255), -1)
-                    
+
                 #(rvec-tvec).any() # get rid of that nasty numpy value array error
 
-                # for i in range(0, ids.size):
-                    # draw axis for the aruco markers
-                    # aruco.drawAxis(color_image, mtx, dist, rvec[i], tvec[i], 0.1)
+                # draw axis for the aruco markers
+                for i in range(0, ids.size):
+                    aruco.drawAxis(color_image, mtx, dist, rvec[i], tvec[i], 0.03)
 
                 # draw a square around the markers
                 aruco.drawDetectedMarkers(color_image, corners)
@@ -440,40 +321,26 @@ if __name__ == '__main__':
                 # code to show 'No Ids' when no markers are found
                 #cv2.putText(frame, "No Ids", (0,64), font, 1, (0,255,0),2,cv2.LINE_AA)
                 pass   
-
-            # update text every 0.5 sec.
-            # if((idxFrame % (VideoFramePerSec/2)) == 0):
-            #     robotStatus = indy.get_robot_status()
-            #     statusDT = "On" if(robotStatus['direct_teaching'] == True) else "Off"
-            #     text = "Direct Teaching Mode: " + statusDT
-            #     drawText(color_image, text, (5, 20))
             
             # display the captured image
             cv2.imshow('Capture Images',color_image)
-            cv2.setMouseCallback('Capture Images', mouseEventCallback, aligned_depth_frame)
+            # cv2.setMouseCallback('Capture Images', mouseEventCallback, aligned_depth_frame)
             
             # handle key inputs
             pressedKey = (cv2.waitKey(1) & 0xFF)
             if pressedKey == ord('q'):
                 break
+
             elif pressedKey == ord('p'):
                 indyPrintTaskPosition()
-            elif pressedKey == ord('z'):
-                print('clear calibration data..')
-                cam3DPoints.clear()
-                robot3DPoints.clear()
+
             elif pressedKey == ord('c'):
                 print("---------------------------------------------------------------")
-                depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
-                depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
-                text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
-                print(text)
-                cam3DPoints.append(depth_point)
                 currTaskPose = indyGetTaskPose()
-                print("Robot Coord: %.5lf, %.5lf, %.5lf" % (currTaskPose[0], currTaskPose[1], currTaskPose[2]))
-                robot3DPoints.append(([currTaskPose[0], currTaskPose[1], currTaskPose[2]]))
+                
                 # capture additional matrices here
                 CalibHandEye.captureHandEyeInputs(currTaskPose, rvec[0], tvec[0])
+            
             elif pressedKey == ord('m'):
                 print("---------------------------------------------------------------")
                 hmTransform = CalibHandEye.findCam2TCPMatrixUsingOpenCV()
@@ -481,6 +348,7 @@ if __name__ == '__main__':
                 print("Transform Matrix = ")
                 print(hmTransform)
                 saveTransformMatrix2(hmTransform)
+            
             elif pressedKey == ord('n'):
                 print("---------------------------------------------------------------")
                 # get a transformation matrix which was created by calibration process
@@ -494,20 +362,38 @@ if __name__ == '__main__':
                 robotCoord = np.dot(hmmtx, tvecHm.T)
                 print(robotCoord)
 
-                curpos = indyGetTaskPose()
-                indy.task_move_to([robotCoord[0], robotCoord[1], curpos[2], curpos[3], curpos[4], curpos[5]])
-                print((robotCoord[0], robotCoord[1], robotCoord[2], curpos[3], curpos[4], curpos[5]))
 
-            elif pressedKey == ord('r'):
-                # finally, we try to get a transformation matrix here
-                # camC = np.array( ((cam3DPoints[0]), (cam3DPoints[1]), (cam3DPoints[2])) )
-                # print(camC.shape)
-                # robotC = np.array( ((robot3DPoints[0]), (robot3DPoints[1]), (robot3DPoints[2])) )
-                # result = CalibHandEye.calculateTransformMatrixUsing3Points(camC, robotC)
-                result = CalibHandEye.calculateTransformMatrix(cam3DPoints, robot3DPoints)
-                print("Transform Matrix = ")
-                print(result)   
-                saveTransformMatrix(result[1])         
+                camRMatrix = np.zeros(shape=(3,3))
+                cv2.Rodrigues(rvec[0], camRMatrix)
+                hmInput = UtilHM.makeHM(camRMatrix, tvec[0])
+                print("Input Pose: ")
+                print(hmInput)
+                print()
+                xyzabc = UtilHM.convertHMtoXYZABCDeg(hmInput)
+                print(xyzabc)
+
+                print("Coverted Pose: ")
+                hmResult = np.dot(hmmtx, hmInput)
+                print(hmResult)
+
+                print("Conveted XYZABC: ")
+                xyzabc = UtilHM.convertHMtoXYZABCDeg(hmResult)
+                print(xyzabc)
+
+                [x, y, z, a, b, c] = xyzabc
+                if(a < 0):
+                    a += 180.0
+                elif( a == 0):
+                    a = 180.0
+                elif(a > 0):
+                    a -= 180.0
+
+                xyzabc2 = [x, y, z, a, b, c]
+                print(xyzabc2)
+
+                #curpos = indyGetTaskPose()
+                #indy.task_move_to([robotCoord[0], robotCoord[1], curpos[2], curpos[3], curpos[4], curpos[5]])
+                #print((robotCoord[0], robotCoord[1], robotCoord[2], curpos[3], curpos[4], curpos[5]))
             elif pressedKey == ord('d'):
                 # set direct-teaching mode on
                 print("direct teaching mode: On")
@@ -523,13 +409,8 @@ if __name__ == '__main__':
             indy.direct_teaching(False)
         # Stop streaming
         pipeline.stop()
-
-    # direct teaching mode is disalbe before exit
-    # robotStatus = indy.get_robot_status()
-    # if( robotStatus['direct_teaching'] == True):
-    #     indy.direct_teaching(False)
     
-    # exit
+    # finalizing all
     cv2.destroyAllWindows()
     indy.disconnect()
         

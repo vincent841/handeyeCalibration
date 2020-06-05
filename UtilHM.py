@@ -14,7 +14,6 @@ def convertXYZABCtoHM(func):
         cc = math.cos(c)
         sc = math.sin(c)    
         H = np.array([[cb*cc, cc*sa*sb - ca*sc, sa*sc + ca*cc*sb, x],[cb*sc, ca*cc + sa*sb*sc, ca*sb*sc - cc*sa, y],[-sb, cb*sa, ca*cb, z],[0,0,0,1]])
-        #KUKA H = np.array([[cb*ca, ca*sc*sb - cc*sa, sc*sa + cc*ca*sb, x],[cb*sa, cc*ca + sc*sb*sa, cc*sb*sa - ca*sc, y],[-sb, cb*sc, cc*cb, z],[0.0,0.0,0.0,1.0]])
         return H
     return wrapper
 
@@ -57,6 +56,36 @@ def convertHMtoXYZABCDeg(xyzabc):
     [x,y,z,a,b,c] = xyzabc
     return [x, y, z, a*180/math.pi, b*180/math.pi, c*180/math.pi]
 
+
+def pose_2_xyzrpw(H):
+    """Calculates the equivalent position (mm) and Euler angles (deg) as an [x,y,z,r,p,w] array, given a pose.
+    It returns the values that correspond to the following operation: 
+    transl(x,y,z)*rotz(w*pi/180)*roty(p*pi/180)*rotx(r*pi/180)
+    
+    :param H: pose
+    :type H: :class:`.Mat`
+    :return: [x,y,z,w,p,r] in mm and deg
+        
+    .. seealso:: :class:`.Mat`, :func:`~robodk.TxyzRxyz_2_Pose`, :func:`~robodk.Pose_2_TxyzRxyz`, :func:`~robodk.Pose_2_ABB`, :func:`~robodk.Pose_2_Adept`, :func:`~robodk.Pose_2_Comau`, :func:`~robodk.Pose_2_Fanuc`, :func:`~robodk.Pose_2_KUKA`, :func:`~robodk.Pose_2_Motoman`, :func:`~robodk.Pose_2_Nachi`, :func:`~robodk.Pose_2_Staubli`, :func:`~robodk.Pose_2_UR`, :func:`~robodk.quaternion_2_pose`
+    """
+    x = H[0,3]
+    y = H[1,3]
+    z = H[2,3]
+    if (H[2,0] > (1.0 - 1e-10)):
+        p = -pi/2
+        r = 0
+        w = math.atan2(-H[1,2],H[1,1])
+    elif H[2,0] < -1.0 + 1e-10:
+        p = pi/2
+        r = 0
+        w = math.atan2(H[1,2],H[1,1])
+    else:
+        p = math.atan2(-H[2,0],math.sqrt(H[0,0]*H[0,0]+H[1,0]*H[1,0]))
+        w = math.atan2(H[1,0],H[0,0])
+        r = math.atan2(H[2,1],H[2,2])    
+    return [x, y, z, r*180/math.pi, p*180/math.pi, w*180/math.pi]
+
+
 '''
 HM =        R(3x3)     d(3x1)
             0(1x3)     1(1x1)
@@ -72,8 +101,8 @@ def inverseHM(H):
 
     HMInv = np.zeros([4, 4], dtype=np.float64)
     HMInv[0:3, 0:3] = rot.T
-    HMInv[0:3, 3] = (-1)*np.dot(rot.T, trs)
-    HMInv[3, 0:4] = [0, 0, 0, 1]
+    HMInv[0:3, 3] = (-1.0)*np.dot(rot.T, trs)
+    HMInv[3, 0:4] = [0.0, 0.0, 0.0, 1.0]
     return HMInv
 
 def invH(H):
@@ -86,7 +115,7 @@ def makeHM(rot, trans):
     HM = np.zeros([4, 4], dtype=np.float64)
     HM[0:3, 0:3] = rot
     HM[0:3, 3] = trans
-    HM[3, 0:4] = [0, 0, 0, 1]
+    HM[3, 0:4] = [0.0, 0.0, 0.0, 1.0]
     return HM
     
 ###############################################################################

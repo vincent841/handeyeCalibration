@@ -78,7 +78,6 @@ def calibrateHandEye(HMBase2TCPs, HMTarget2Cams, HandInEye=True):
 def captureHandEyeInputs(robotXYZABC, camRVec, camTVec):
     # prepare Gripper2Base inputs
     hmRobot = UtilHM.convertXYZABCtoHMDeg(robotXYZABC)
-    #hmRobot = UtilHM.inverseHM(hmRobot)
     R_gripper2base.append(hmRobot[0:3, 0:3])
     t_gripper2base.append(hmRobot[0:3, 3])
 
@@ -120,18 +119,6 @@ def findCam2TCPMatrixUsingOpenCV():
                 print(hmTransform2)
                 print("Checkpoint #2: ")
                 print(UtilHM.inverseHM(hmTransform2))
-                # hmTransform3 = np.dot(UtilHM.inverseHM(hmC2T), UtilHM.inverseHM(hmT2G))
-                # hmTransform3 = np.dot(hmTransform3, UtilHM.inverseHM(hmG2B))
-                # print("Checkpoint #3: ")
-                # print(hmTransform3)
-
-    # hmT2G = UtilHM.makeHM(R_cam2gripper, t_cam2gripper.T)
-    # hmG2B = UtilHM.makeHM(R_gripper2base[0], t_gripper2base[0].reshape(1,3))
-    # hmC2T = UtilHM.makeHM(R_target2cam[0], t_target2cam[0].reshape(1,3))
-    # hmTransform = np.dot(hmG2B, hmT2G)
-    # hmTransform = np.dot(hmTransform, hmC2T)
-    # print(hmTransform)
-    
 
     return hmTransform2
 
