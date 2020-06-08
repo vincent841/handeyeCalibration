@@ -4,21 +4,21 @@ import cv2
 import glob
 
 def saveCalibData(mtx, dist, rvecs, tvecs):
-    calibFile = cv2.FileStorage("calibData.xml", cv2.FILE_STORAGE_WRITE)
+    calibFile = cv2.FileStorage("CameraCalibResult.xml", cv2.FILE_STORAGE_WRITE)
     calibFile.write("cameraMatrix", mtx)
     calibFile.write("distCoeff", dist)
     
     #rotation_matrix = np.zeros(shape=(3,3))
-    iter = 0
-    for rvec in rvecs:
-        #cv2.Rodrigues(rvec, rotation_matrix)
-        #calibFile.write("rvec" + str(iter), rotation_matrix)
-        calibFile.write("rvec" + str(iter), rvec)
-        iter+=1
-    iter = 0
-    for tvec in tvecs:
-        calibFile.write("tvec" + str(iter), tvec)
-        iter+=1
+    # iter = 0
+    # for rvec in rvecs:
+    #     #cv2.Rodrigues(rvec, rotation_matrix)
+    #     #calibFile.write("rvec" + str(iter), rotation_matrix)
+    #     calibFile.write("rvec" + str(iter), rvec)
+    #     iter+=1
+    # iter = 0
+    # for tvec in tvecs:
+    #     calibFile.write("tvec" + str(iter), tvec)
+    #     iter+=1
     calibFile.release()
 
 def drawAxis(img, corners, imgpts):

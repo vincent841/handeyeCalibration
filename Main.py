@@ -1,33 +1,21 @@
-
 import indydcp_client as indycli
 import pyrealsense2 as rs
+import cv2
+import cv2.aruco as aruco
+
 import numpy as np 
 import sys
 from time import sleep
-import cv2
 import math
-import UtilHM
 import os
 import datetime
-import CalibHandEye
-import cv2.aruco as aruco
 
-# robot parameters
-_server_ip = "192.168.1.207"
-_name = "NRMK-Indy7"
-
-# calibration parameters
-UseRealSenseInternalMatrix = True
-VideoFrameWidth = 1280
-VideoFrameHeight = 720
-VideoFramePerSec = 30
-
-# handeye calibration parameters
-#...
+import Config
+import UtilHM
+import HandEyeCalib
 
 # opencv parameters
-criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
-
+OpencvCriteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
 
 '''
 #####################################################################################
@@ -54,7 +42,6 @@ def initialzeRobot(indy):
     if( status['emergency'] == True):
         indy.stop_emergency()
     sleep(5)
-    
     status = indy.get_robot_status()
     print("Reset robot done")
     print("is in resetting? ", status['resetting'])
@@ -71,9 +58,6 @@ def indyPrintTaskPosition():
     task_pos_mm = [task_pos[0], task_pos[1], task_pos[2],task_pos[3], task_pos[4], task_pos[5]]
     print ("Task Pos: ")
     print (task_pos_mm) 
-    # hm = UtilHM.convertXYZABCtoHMDeg(task_pos)
-    # print("Homogeneous Matrix: ")
-    # print(hm)
 
 def indyGetCurrentHMPose():
     task_pos = indy.get_task_pos()
@@ -88,7 +72,6 @@ def indyMoveToTask(taskpos):
     indy.task_move_to(taskpos)
 
 
-
 '''
 #####################################################################################
 Realsense Camera Control/Status Functions
@@ -99,8 +82,8 @@ def initializeRealsense():
     #Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
-    config.enable_stream(rs.stream.depth, VideoFrameWidth, VideoFrameHeight, rs.format.z16, VideoFramePerSec)
-    config.enable_stream(rs.stream.color, VideoFrameWidth, VideoFrameHeight, rs.format.bgr8, VideoFramePerSec)
+    config.enable_stream(rs.stream.depth, Config.VideoFrameWidth, Config.VideoFrameHeight, rs.format.z16, Config.VideoFramePerSec)
+    config.enable_stream(rs.stream.color, Config.VideoFrameWidth, Config.VideoFrameHeight, rs.format.bgr8, Config.VideoFramePerSec)
 
     # Start streaming
     pipeline.start(config)
@@ -116,24 +99,11 @@ def convertIntrinsicsMat(intrinsics):
     return mtx, dist
 
 
-
 '''
 #####################################################################################
 Utility Functions
 #####################################################################################
 '''
-# create a directory to save captured images 
-def makeFrameImageDirectory():
-    now = datetime.datetime.now()
-    dirString = now.strftime("%Y%m%d%H%M%S")
-    try:
-        if not(os.path.isdir(dirString)):
-            os.makedirs(os.path.join(dirString))
-    except OSError as e:
-        print("Can't make the directory: %s" % dirFrameImage)
-        raise
-    return dirString
-
 def drawAxis(img, corners, imgpts):
     corner = tuple(corners[0].ravel())
     img = cv2.line(img, corner, tuple(imgpts[0].ravel()), (255,0,0), 5)
@@ -153,15 +123,17 @@ Transform Matrix Functions
 #####################################################################################
 '''
 # save a transform matrix to xml data as a file
-def saveTransformMatrix(cam2calHM):
-    calibFile = cv2.FileStorage("CalibResults.xml", cv2.FILE_STORAGE_WRITE)
-    calibFile.write("cam2calHM", cam2calHM)
+def saveTransformMatrix(resultMatrix):
+    calibFile = cv2.FileStorage("HandEyeCalibResult.xml", cv2.FILE_STORAGE_WRITE)
+    calibFile.write("HEMatrix", resultMatrix)
     calibFile.release()
 
-def saveTransformMatrix2(cam2calHM2):
-    calibFile = cv2.FileStorage("CalibResults2.xml", cv2.FILE_STORAGE_WRITE)
-    calibFile.write("cam2calHM2", cam2calHM2)
-    calibFile.release()
+# get a transformation matrix which was created by calibration process
+def loadTransformMatrix():
+    calibFile = cv2.FileStorage("HandEyeCalibResult.xml", cv2.FILE_STORAGE_READ)
+    hmnode = calibFile.getNode("HEMatrix")
+    hmmtx = hmnode.mat()
+    return hmmtx
 
 
 
@@ -190,9 +162,7 @@ def mouseEventCallback(event, x, y, flags, param):
         depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [int(x), int(y)], depth)
 
         # get a transformation matrix which was created by calibration process
-        calibFile = cv2.FileStorage("CalibResults2.xml", cv2.FILE_STORAGE_READ)
-        hmnode = calibFile.getNode("cam2calHM2")
-        hmmtx = hmnode.mat()
+        hmmtx = loadTransformMatrix()
 
         # print("Transform Matrix: ")
         # print(hmmtx)
@@ -209,7 +179,97 @@ def mouseEventCallback(event, x, y, flags, param):
         print(robotCoord)
 
 
+'''
+#####################################################################################
+Key Event Handler
+#####################################################################################
+'''
+def keyEventHandler(pressedKey, flagAruco, color_image, tvec, rvec, mtx, dist):
 
+    goExit = False
+
+    if pressedKey == ord('q'):
+        goExit = True
+    elif pressedKey == ord('d'):
+        # set direct-teaching mode on
+        print("direct teaching mode: On")
+        indy.direct_teaching(True)
+    elif pressedKey == ord('f'):
+        # set direct-teaching mode off
+        print("direct teaching mode: Off")
+        indy.direct_teaching(False)
+    elif pressedKey == ord('p'):
+        indyPrintTaskPosition()
+
+    if(flagAruco == False):
+        print("Can't find any aruco marker.")
+    else:
+        if pressedKey == ord('c'):
+            print("---------------------------------------------------------------")
+            # get the current robot position
+            currTaskPose = indyGetTaskPose()
+            # capture additional matrices here
+            HandEyeCalib.captureHandEyeInputs(currTaskPose, rvec[0], tvec[0])
+        elif pressedKey == ord('m'):
+            print("---------------------------------------------------------------")
+            hmTransform = HandEyeCalib.getHandEyeResultMatrixUsingOpenCV()
+            #hmTransform = UtilHM.inverseHM(hmTransform)
+            print("Transform Matrix = ")
+            print(hmTransform)
+            saveTransformMatrix(hmTransform)
+        elif pressedKey == ord('n'):
+            print("---------------------------------------------------------------")
+            # get a transformation matrix which was created by calibration process
+            hmmtx = loadTransformMatrix()
+            #print("Transform matrix: ")
+            #print(hmmtx)
+            #tvecHm = np.array([tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], 1.0])
+            #robotCoord = np.dot(hmmtx, tvecHm.T)
+            #print("Converted Coord: ")
+            #print(robotCoord)
+
+            camRMatrix = np.zeros(shape=(3,3))
+            cv2.Rodrigues(rvec[0], camRMatrix)
+            
+            # ...
+            #tansBase2TCP = np.array([[-1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, -1.0]])
+            tansBase2TCP = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]])
+            camRMatrix = np.dot(tansBase2TCP,camRMatrix)
+
+            tvecModified = np.array([tvec[0][0][0], tvec[0][0][1], tvec[0][0][2]])
+
+            hmInput = UtilHM.makeHM(camRMatrix, tvecModified)
+            print("Input Pose: ")
+            print(hmInput)
+            print()
+            xyzabc = UtilHM.convertHMtoXYZABCDeg(hmInput)
+            print(xyzabc)
+
+            print("Coverted Pose: ")
+            hmResult = np.dot(hmmtx, hmInput)
+            print(hmResult)
+
+            print("Conveted XYZABC: ")
+            xyzabc = UtilHM.convertHMtoXYZABCDeg(hmResult)
+            print(xyzabc)
+
+            # [x, y, z, a, b, c] = xyzabc
+            # if(a < 0):
+            #     a += 180.0
+            # elif( a == 0):
+            #     a = 180.0
+            # elif(a > 0):
+            #     a -= 180.0
+
+            # xyzabc2 = [x, y, z, a, b, c]
+            # print(xyzabc2)
+
+        #curpos = indyGetTaskPose()
+        #indy.task_move_to([robotCoord[0], robotCoord[1], curpos[2], curpos[3], curpos[4], curpos[5]])
+        #print((robotCoord[0], robotCoord[1], robotCoord[2], curpos[3], curpos[4], curpos[5]))
+
+
+    return goExit
 
 ###############################################################################
 # Hand-eye calibration process 
@@ -219,7 +279,7 @@ def mouseEventCallback(event, x, y, flags, param):
 if __name__ == '__main__':
 
     # connect to Indy
-    indy = indyConnect(_server_ip, _name)
+    indy = indyConnect(Config.INDY_SERVER_IP, Config.INDY_SERVER_NAME)
     if(indy == None):
         print("Can't connect the robot and exit this process..")
         sys.exit()
@@ -242,7 +302,7 @@ if __name__ == '__main__':
     flagFindAruco = False
 
     # use created camera matrix 
-    if(UseRealSenseInternalMatrix == False):
+    if(Config.UseRealSenseInternalMatrix == False):
         calibFile = cv2.FileStorage("calibData.xml", cv2.FILE_STORAGE_READ)
         cmnode = calibFile.getNode("cameraMatrix")
         mtx = cmnode.mat()
@@ -267,8 +327,8 @@ if __name__ == '__main__':
             # get internal intrinsics & extrinsics in D435
             depth_intrin = aligned_depth_frame.profile.as_video_stream_profile().intrinsics
             color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
-            depth_to_color_extrin = aligned_depth_frame.profile.get_extrinsics_to(color_frame.profile)
-            if(UseRealSenseInternalMatrix == True):    
+            #depth_to_color_extrin = aligned_depth_frame.profile.get_extrinsics_to(color_frame.profile)
+            if(Config.UseRealSenseInternalMatrix == True):    
                 mtx, dist = convertIntrinsicsMat(color_intrin)
             
             # Convert images to numpy arrays
@@ -317,9 +377,14 @@ if __name__ == '__main__':
                 strg = ''
                 for i in range(0, ids.size):
                     strg += str(ids[i][0])+', '
+
+                flagFindAruco = True
             else:
                 # code to show 'No Ids' when no markers are found
                 #cv2.putText(frame, "No Ids", (0,64), font, 1, (0,255,0),2,cv2.LINE_AA)
+                flagFindAruco = False
+                tvec = None
+                rvec = None
                 pass   
             
             # display the captured image
@@ -328,80 +393,11 @@ if __name__ == '__main__':
             
             # handle key inputs
             pressedKey = (cv2.waitKey(1) & 0xFF)
-            if pressedKey == ord('q'):
-                break
+            if(pressedKey != 0xff):
+                exitFlag = keyEventHandler(pressedKey, flagFindAruco, color_image, tvec, rvec, mtx, dist)
+                if(exitFlag == True):
+                    break
 
-            elif pressedKey == ord('p'):
-                indyPrintTaskPosition()
-
-            elif pressedKey == ord('c'):
-                print("---------------------------------------------------------------")
-                currTaskPose = indyGetTaskPose()
-                
-                # capture additional matrices here
-                CalibHandEye.captureHandEyeInputs(currTaskPose, rvec[0], tvec[0])
-            
-            elif pressedKey == ord('m'):
-                print("---------------------------------------------------------------")
-                hmTransform = CalibHandEye.findCam2TCPMatrixUsingOpenCV()
-                #hmTransform = UtilHM.inverseHM(hmTransform)
-                print("Transform Matrix = ")
-                print(hmTransform)
-                saveTransformMatrix2(hmTransform)
-            
-            elif pressedKey == ord('n'):
-                print("---------------------------------------------------------------")
-                # get a transformation matrix which was created by calibration process
-                calibFile = cv2.FileStorage("CalibResults2.xml", cv2.FILE_STORAGE_READ)
-                hmnode = calibFile.getNode("cam2calHM2")
-                hmmtx = hmnode.mat()
-                print("Transform matrix: ")
-                print(hmmtx)
-                print("Converted Coord: ")
-                tvecHm = np.array([tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], 1.0])
-                robotCoord = np.dot(hmmtx, tvecHm.T)
-                print(robotCoord)
-
-
-                camRMatrix = np.zeros(shape=(3,3))
-                cv2.Rodrigues(rvec[0], camRMatrix)
-                hmInput = UtilHM.makeHM(camRMatrix, tvec[0])
-                print("Input Pose: ")
-                print(hmInput)
-                print()
-                xyzabc = UtilHM.convertHMtoXYZABCDeg(hmInput)
-                print(xyzabc)
-
-                print("Coverted Pose: ")
-                hmResult = np.dot(hmmtx, hmInput)
-                print(hmResult)
-
-                print("Conveted XYZABC: ")
-                xyzabc = UtilHM.convertHMtoXYZABCDeg(hmResult)
-                print(xyzabc)
-
-                [x, y, z, a, b, c] = xyzabc
-                if(a < 0):
-                    a += 180.0
-                elif( a == 0):
-                    a = 180.0
-                elif(a > 0):
-                    a -= 180.0
-
-                xyzabc2 = [x, y, z, a, b, c]
-                print(xyzabc2)
-
-                #curpos = indyGetTaskPose()
-                #indy.task_move_to([robotCoord[0], robotCoord[1], curpos[2], curpos[3], curpos[4], curpos[5]])
-                #print((robotCoord[0], robotCoord[1], robotCoord[2], curpos[3], curpos[4], curpos[5]))
-            elif pressedKey == ord('d'):
-                # set direct-teaching mode on
-                print("direct teaching mode: On")
-                indy.direct_teaching(True)
-            elif pressedKey == ord('f'):
-                # set direct-teaching mode off
-                print("direct teaching mode: Off")
-                indy.direct_teaching(False)
     finally:
         # direct teaching mode is disalbe before exit
         robotStatus = indy.get_robot_status()

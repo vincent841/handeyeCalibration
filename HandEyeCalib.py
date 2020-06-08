@@ -47,11 +47,9 @@ def calculateTransformMatrix(srcPoints, dstPoints):
     trMatrix = cv2.solve(p, p_prime, flags=cv2.DECOMP_SVD)
     return trMatrix
 
-def calibrateHandEye(HMBase2TCPs, HMTarget2Cams, HandInEye=True):
+def calibrateHandEyeTest(HMBase2TCPs, HMTarget2Cams):
     #assert (HMBase2TCPs.len() == HMTarget2Cams.len())
     for hmmat in HMBase2TCPs:
-        if(HandInEye == True):
-            hmmat = UtilHM.inverseHM(hmmat)
         rotataion = hmmat[0:3, 0:3]
         R_gripper2base.append(rotataion)
         translation = hmmat[0:3, 3]
@@ -89,7 +87,7 @@ def captureHandEyeInputs(robotXYZABC, camRVec, camTVec):
     R_target2cam.append(hmCam[0:3, 0:3])
     t_target2cam.append(hmCam[0:3, 3])
 
-def findCam2TCPMatrixUsingOpenCV():
+def getHandEyeResultMatrixUsingOpenCV():
     methodHE = [cv2.CALIB_HAND_EYE_TSAI, cv2.CALIB_HAND_EYE_PARK, cv2.CALIB_HAND_EYE_HORAUD, cv2.CALIB_HAND_EYE_ANDREFF, cv2.CALIB_HAND_EYE_DANIILIDIS]
     for mth in methodHE:
         R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, None, None, mth)
@@ -123,37 +121,6 @@ def findCam2TCPMatrixUsingOpenCV():
     return hmTransform2
 
 
-
-
-def findCam2TCPMatrix(Rotgripper2base, Transgripper2base, Rottarget2cam, Transtarget2cam):
-    #assert (HMBase2TCPs.len() == HMTarget2Cams.len())
-    for hmmat in HMBase2TCPs:
-        if(HandInEye == True):
-            hmmat = UtilHM.inverseHM(hmmat)
-        rotataion = hmmat[0:3, 0:3]
-        R_gripper2base.append(rotataion)
-        translation = hmmat[0:3, 3]
-        t_gripper2base.append(translation)
-
-    for hmmat in HMTarget2Cams:
-        rotataion = hmmat[0:3, 0:3]
-        R_target2cam.append(rotataion)
-        translation = hmmat[0:3, 3]
-        t_target2cam.append(translation) 
-    
-    methodHE = [cv2.CALIB_HAND_EYE_TSAI, cv2.CALIB_HAND_EYE_PARK, cv2.CALIB_HAND_EYE_HORAUD, cv2.CALIB_HAND_EYE_ANDREFF, cv2.CALIB_HAND_EYE_DANIILIDIS]
-
-    for mth in methodHE:
-        R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(Rotgripper2base, Transgripper2base, Rottarget2cam, Transtarget2cam, None, None, mth)
-        #cv2.calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, None, None, mth)
-        # output results
-        print("--------------------------------------")
-        print("Method %d" % mth)
-        print(R_cam2gripper)
-        print(t_cam2gripper)
-        print("--------------------------------------")
-
-
 ###############################################################################
 # Test Codes using sample data in yml format
 ###############################################################################
@@ -178,9 +145,8 @@ if __name__ == '__main__':
         if key.find("gripper2base") >= 0:
             ymlmtx = UtilHM.inverseHM(ymlmtx)
             YMLHMBase2TCPs.append(ymlmtx)
-    
-    calibrateHandEye(YMLHMBase2TCPs, YMLHMTarget2Cams, False)
 
+    calibrateHandEyeTest(YMLHMBase2TCPs, YMLHMTarget2Cams)
 
     # # calculateHM Test
     cam3DTestPoints.append([-0.10259, 0.07283, 0.40900])

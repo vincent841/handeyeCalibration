@@ -1,4 +1,3 @@
-
 import numpy as np 
 import math
 
@@ -56,18 +55,7 @@ def convertHMtoXYZABCDeg(xyzabc):
     [x,y,z,a,b,c] = xyzabc
     return [x, y, z, a*180/math.pi, b*180/math.pi, c*180/math.pi]
 
-
 def pose_2_xyzrpw(H):
-    """Calculates the equivalent position (mm) and Euler angles (deg) as an [x,y,z,r,p,w] array, given a pose.
-    It returns the values that correspond to the following operation: 
-    transl(x,y,z)*rotz(w*pi/180)*roty(p*pi/180)*rotx(r*pi/180)
-    
-    :param H: pose
-    :type H: :class:`.Mat`
-    :return: [x,y,z,w,p,r] in mm and deg
-        
-    .. seealso:: :class:`.Mat`, :func:`~robodk.TxyzRxyz_2_Pose`, :func:`~robodk.Pose_2_TxyzRxyz`, :func:`~robodk.Pose_2_ABB`, :func:`~robodk.Pose_2_Adept`, :func:`~robodk.Pose_2_Comau`, :func:`~robodk.Pose_2_Fanuc`, :func:`~robodk.Pose_2_KUKA`, :func:`~robodk.Pose_2_Motoman`, :func:`~robodk.Pose_2_Nachi`, :func:`~robodk.Pose_2_Staubli`, :func:`~robodk.Pose_2_UR`, :func:`~robodk.quaternion_2_pose`
-    """
     x = H[0,3]
     y = H[1,3]
     z = H[2,3]
