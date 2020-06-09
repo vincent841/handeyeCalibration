@@ -11,8 +11,8 @@ import os
 import datetime
 
 import Config
-import UtilHM
-import HandEyeCalib
+from UtilSet import *
+from HandEyeCalib import *
 
 # opencv parameters
 OpencvCriteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
@@ -61,7 +61,7 @@ def indyPrintTaskPosition():
 
 def indyGetCurrentHMPose():
     task_pos = indy.get_task_pos()
-    hm = UtilHM.convertXYZABCtoHMDeg(task_pos)
+    hm = HMUtil.convertXYZABCtoHMDeg(task_pos)
     return hm
 
 def indyGetTaskPose():
@@ -104,17 +104,9 @@ def convertIntrinsicsMat(intrinsics):
 Utility Functions
 #####################################################################################
 '''
-def drawAxis(img, corners, imgpts):
-    corner = tuple(corners[0].ravel())
-    img = cv2.line(img, corner, tuple(imgpts[0].ravel()), (255,0,0), 5)
-    img = cv2.line(img, corner, tuple(imgpts[1].ravel()), (0,255,0), 5)
-    img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (0,0,255), 5)
-    return img
-
 def drawText(img, text, imgpt):
     font = cv2.FONT_HERSHEY_PLAIN
     cv2.putText(img, text, imgpt, font, 1, (0,255,0),1,cv2.LINE_AA)
-
 
 
 '''
@@ -135,14 +127,12 @@ def loadTransformMatrix():
     hmmtx = hmnode.mat()
     return hmmtx
 
-
-
 '''
 #####################################################################################
 Mouse Event Handler
 #####################################################################################
 '''
-global robotCoord
+global indy7Coord
 def mouseEventCallback(event, x, y, flags, param):
     aligned_depth_frame = param
     if(event == cv2.EVENT_LBUTTONUP):
@@ -172,11 +162,11 @@ def mouseEventCallback(event, x, y, flags, param):
         text = "Camera Coord: %.5lf, %.5lf, %.5lf" % (depth_point[0], depth_point[1], depth_point[2])
         print(text)
 
-        #robotCoord = np.dot(hmmtx, camCoord)
-        robotCoord = np.dot(hmmtx, camCoord)
+        #indy7Coord = np.dot(hmmtx, camCoord)
+        indy7Coord = np.dot(hmmtx, camCoord)
 
         print("Transfomred Robot-based Coordinate: ")
-        print(robotCoord)
+        print(indy7Coord)
 
 
 '''
@@ -184,7 +174,7 @@ def mouseEventCallback(event, x, y, flags, param):
 Key Event Handler
 #####################################################################################
 '''
-def keyEventHandler(pressedKey, flagAruco, color_image, tvec, rvec, mtx, dist):
+def keyEventHandler(pressedKey, flagAruco, color_image, tvec, rvec, mtx, dist, handeye):
 
     goExit = False
 
@@ -209,65 +199,50 @@ def keyEventHandler(pressedKey, flagAruco, color_image, tvec, rvec, mtx, dist):
             # get the current robot position
             currTaskPose = indyGetTaskPose()
             # capture additional matrices here
-            HandEyeCalib.captureHandEyeInputs(currTaskPose, rvec[0], tvec[0])
+            handeye.captureHandEyeInputs(currTaskPose, rvec[0], tvec[0])
         elif pressedKey == ord('m'):
             print("---------------------------------------------------------------")
-            hmTransform = HandEyeCalib.getHandEyeResultMatrixUsingOpenCV()
-            #hmTransform = UtilHM.inverseHM(hmTransform)
+            hmTransform = handeye.getHandEyeResultMatrixUsingOpenCV()
             print("Transform Matrix = ")
             print(hmTransform)
             saveTransformMatrix(hmTransform)
         elif pressedKey == ord('n'):
             print("---------------------------------------------------------------")
+            
+            # change a rotation vector to a rotation matrix
+            rotMatrix = np.zeros(shape=(3,3))
+            cv2.Rodrigues(rvec[0], rotMatrix)
+            
+            # transform a rotation matrix based on x-axis 
+            tansBase2TCP = np.array([[1.0, 0.0, 0.0],[0.0, -1.0, 0.0],[0.0, 0.0, -1.0]]) # 180 degree of x axis
+            rotMatrix = np.dot(tansBase2TCP, rotMatrix)
+
+            # make a homogeneous matrix using a rotation matrix and a translation matrix as 
+            hmCal2Cam = HMUtil.makeHM(rotMatrix, tvec[0])
+            print("Cal2Cam HM: ")
+            print(hmCal2Cam)
+            xyzabc = HMUtil.convertHMtoXYZABCDeg(hmCal2Cam)
+            print(xyzabc)
+
+            # calcaluate the specific position based on hmInput
+            # specificPosition = np.array([[0.0, 0.0, 0.10, 1.0]])
+            # hmInput = np.dot(hmCal2Cam, specificPosition.T)
+
             # get a transformation matrix which was created by calibration process
             hmmtx = loadTransformMatrix()
-            #print("Transform matrix: ")
-            #print(hmmtx)
-            #tvecHm = np.array([tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], 1.0])
-            #robotCoord = np.dot(hmmtx, tvecHm.T)
-            #print("Converted Coord: ")
-            #print(robotCoord)
 
-            camRMatrix = np.zeros(shape=(3,3))
-            cv2.Rodrigues(rvec[0], camRMatrix)
-            
-            # ...
-            #tansBase2TCP = np.array([[-1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, -1.0]])
-            tansBase2TCP = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]])
-            camRMatrix = np.dot(tansBase2TCP,camRMatrix)
+            # get a final homogeneous matrix
+            #hmResult = np.dot(hmmtx, hmInput)
+            hmResult = np.dot(hmmtx, hmCal2Cam)
+            # print("Result(hmInput): ")
+            # print(hmResult)
+            # print("Result(hmCal2Cam): ")
+            # print(hmResult2)            
 
-            tvecModified = np.array([tvec[0][0][0], tvec[0][0][1], tvec[0][0][2]])
-
-            hmInput = UtilHM.makeHM(camRMatrix, tvecModified)
-            print("Input Pose: ")
-            print(hmInput)
-            print()
-            xyzabc = UtilHM.convertHMtoXYZABCDeg(hmInput)
-            print(xyzabc)
-
-            print("Coverted Pose: ")
-            hmResult = np.dot(hmmtx, hmInput)
-            print(hmResult)
-
+            # get a final xyzuvw for the last homogenous matrix
+            xyzabc = HMUtil.convertHMtoXYZABCDeg(hmResult)
             print("Conveted XYZABC: ")
-            xyzabc = UtilHM.convertHMtoXYZABCDeg(hmResult)
             print(xyzabc)
-
-            # [x, y, z, a, b, c] = xyzabc
-            # if(a < 0):
-            #     a += 180.0
-            # elif( a == 0):
-            #     a = 180.0
-            # elif(a > 0):
-            #     a -= 180.0
-
-            # xyzabc2 = [x, y, z, a, b, c]
-            # print(xyzabc2)
-
-        #curpos = indyGetTaskPose()
-        #indy.task_move_to([robotCoord[0], robotCoord[1], curpos[2], curpos[3], curpos[4], curpos[5]])
-        #print((robotCoord[0], robotCoord[1], robotCoord[2], curpos[3], curpos[4], curpos[5]))
-
 
     return goExit
 
@@ -303,11 +278,14 @@ if __name__ == '__main__':
 
     # use created camera matrix 
     if(Config.UseRealSenseInternalMatrix == False):
-        calibFile = cv2.FileStorage("calibData.xml", cv2.FILE_STORAGE_READ)
+        calibFile = cv2.FileStorage("CameraCalibResult.xml", cv2.FILE_STORAGE_READ)
         cmnode = calibFile.getNode("cameraMatrix")
         mtx = cmnode.mat()
         dcnode = calibFile.getNode("distCoeff")
         dist = dcnode.mat()
+
+    # create a handeye calib. instance
+    handeye = HandEyeCalibration()
 
     # get frames and process a key event
     try:
@@ -354,7 +332,7 @@ if __name__ == '__main__':
             if np.all(ids != None):
                 # estimate pose of each marker and return the values
                 # rvet and tvec-different from camera coefficients
-                rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, 0.048, mtx, dist)
+                rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, Config.ArucoSize, mtx, dist)
 
                 # TODO: consider how accurate the center point is as below.....
                 # get the center of an Aruco Makers
@@ -394,7 +372,7 @@ if __name__ == '__main__':
             # handle key inputs
             pressedKey = (cv2.waitKey(1) & 0xFF)
             if(pressedKey != 0xff):
-                exitFlag = keyEventHandler(pressedKey, flagFindAruco, color_image, tvec, rvec, mtx, dist)
+                exitFlag = keyEventHandler(pressedKey, flagFindAruco, color_image, tvec, rvec, mtx, dist, handeye)
                 if(exitFlag == True):
                     break
 
@@ -406,7 +384,7 @@ if __name__ == '__main__':
         # Stop streaming
         pipeline.stop()
     
-    # finalizing all
+    # arrange all to finitsh this application here
     cv2.destroyAllWindows()
     indy.disconnect()
         
