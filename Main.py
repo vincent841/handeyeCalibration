@@ -4,7 +4,7 @@ import cv2
 import cv2.aruco as aruco
 
 import numpy as np 
-import sys
+import sys 
 from time import sleep
 import math
 import os
@@ -15,7 +15,7 @@ from UtilSet import *
 from HandEyeCalib import *
 
 # opencv parameters
-OpencvCriteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria
+OpencvCriteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)          # termination criteria (maybe not used..)
 
 '''
 #####################################################################################
@@ -31,7 +31,7 @@ def indyConnect(servIP, connName):
         obj = None
     return obj
 
-def initialzeRobot(indy):
+def initializeIndy7(indy):
     indy.reset_robot()
     status = indy.get_robot_status()
     print("Resetting robot")
@@ -200,6 +200,8 @@ def keyEventHandler(pressedKey, flagAruco, color_image, tvec, rvec, mtx, dist, h
             currTaskPose = indyGetTaskPose()
             # capture additional matrices here
             handeye.captureHandEyeInputs(currTaskPose, rvec[0], tvec[0])
+        elif pressedKey == ord('z'):
+            handeye.resetHandEyeInputs()
         elif pressedKey == ord('m'):
             print("---------------------------------------------------------------")
             hmTransform = handeye.getHandEyeResultMatrixUsingOpenCV()
@@ -208,41 +210,53 @@ def keyEventHandler(pressedKey, flagAruco, color_image, tvec, rvec, mtx, dist, h
             saveTransformMatrix(hmTransform)
         elif pressedKey == ord('n'):
             print("---------------------------------------------------------------")
-            
             # change a rotation vector to a rotation matrix
             rotMatrix = np.zeros(shape=(3,3))
             cv2.Rodrigues(rvec[0], rotMatrix)
             
-            # transform a rotation matrix based on x-axis 
-            tansBase2TCP = np.array([[1.0, 0.0, 0.0],[0.0, -1.0, 0.0],[0.0, 0.0, -1.0]]) # 180 degree of x axis
-            rotMatrix = np.dot(tansBase2TCP, rotMatrix)
+            # transform a rotation matrix based on x-axis (for the purpose of test)
+            # tansBase2TCP = np.array([[1.0, 0.0, 0.0],[0.0, -1.0, 0.0],[0.0, 0.0, -1.0]]) # 180 degree of x axis
+            # rotMatrix = np.dot(tansBase2TCP, rotMatrix)
 
             # make a homogeneous matrix using a rotation matrix and a translation matrix as 
             hmCal2Cam = HMUtil.makeHM(rotMatrix, tvec[0])
-            print("Cal2Cam HM: ")
-            print(hmCal2Cam)
+            # print("Cal2Cam HM: ")
+            # print(hmCal2Cam)
             xyzabc = HMUtil.convertHMtoXYZABCDeg(hmCal2Cam)
-            print(xyzabc)
-
-            # calcaluate the specific position based on hmInput
-            # specificPosition = np.array([[0.0, 0.0, 0.10, 1.0]])
-            # hmInput = np.dot(hmCal2Cam, specificPosition.T)
+            #print(xyzabc)
 
             # get a transformation matrix which was created by calibration process
             hmmtx = loadTransformMatrix()
 
-            # get a final homogeneous matrix
-            #hmResult = np.dot(hmmtx, hmInput)
-            hmResult = np.dot(hmmtx, hmCal2Cam)
+            # calcaluate the specific position based on hmInput
+            hmWanted = HMUtil.makeHM(np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]]), np.array([0.0, 0.0, Config.HandEyeTargetZ]).T)
+            hmInput = np.dot(hmCal2Cam, hmWanted)
+            # print("hmInput: ")
+            # print(hmInput)
+
+            hmResult = np.dot(hmmtx, hmInput)
             # print("Result(hmInput): ")
-            # print(hmResult)
+            # print(hmResult)            
+
+            # get a final homogeneous matrix for the current marker.
+            #hmResult2 = np.dot(hmmtx, hmCal2Cam)
             # print("Result(hmCal2Cam): ")
-            # print(hmResult2)            
+            # print(hmResult2)
 
             # get a final xyzuvw for the last homogenous matrix
-            xyzabc = HMUtil.convertHMtoXYZABCDeg(hmResult)
-            print("Conveted XYZABC: ")
-            print(xyzabc)
+            xyzuvw = HMUtil.convertHMtoXYZABCDeg(hmResult)
+            print("Final XYZABC: ")
+            print(xyzuvw)
+
+            # test move to the destination
+            # currPos = indyGetTaskPose()
+            # [xc,yc,zc,uc,vc,wc] = currPos
+
+            # [x,y,z,u,v,w] = xyzuvw
+            # xyzuvw = [x,y,z,uc,vc,wc]
+            # indy.task_move_to(xyzuvw)
+
+
 
     return goExit
 
@@ -261,7 +275,7 @@ if __name__ == '__main__':
 
     # intialize the robot
     print("Intialize the robot...")
-    initialzeRobot(indy)
+    initializeIndy7(indy)
     sleep(1)
 
     # ready to capture frames for realsense camera
@@ -274,7 +288,7 @@ if __name__ == '__main__':
     cv2.namedWindow('Capture Images')
 
     # create a variable for frame indexing
-    flagFindAruco = False
+    flagFindMainAruco = False
 
     # use created camera matrix 
     if(Config.UseRealSenseInternalMatrix == False):
@@ -284,13 +298,17 @@ if __name__ == '__main__':
         dcnode = calibFile.getNode("distCoeff")
         dist = dcnode.mat()
 
+
+    if(Config.UseNewCameraMatrix == True):
+        newcameramtx, roi=cv2.getOptimalNewCameraMatrix(mtx,dist,(Config.VideoFrameWidth,Config.VideoFrameHeight),1,(Config.VideoFrameWidth,Config.VideoFrameHeight))
+
     # create a handeye calib. instance
     handeye = HandEyeCalibration()
 
     # get frames and process a key event
     try:
         while(True):
-            # Wait for a coherent pair of frames: depth and color
+            # wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
 
             # Align the depth frame to color frame
@@ -324,43 +342,65 @@ if __name__ == '__main__':
             parameters.adaptiveThreshConstant = 7
             #parameters.cornerRefinementMethod = CORNER_REFINE_SUBPIX
 
-            # lists of ids and the corners belonging to each id
-            corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+
+            if(Config.UseNewCameraMatrix == True):
+                dst = cv2.undistort(gray, mtx, dist, None, newcameramtx)
+                corners, ids, rejectedImgPoints = aruco.detectMarkers(dst, aruco_dict, parameters=parameters)
+            else:
+                # lists of ids and the corners belonging to each id
+                corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
             # check if the ids list is not empty
             # if no check is added the code will crash
             if np.all(ids != None):
                 # estimate pose of each marker and return the values
                 # rvet and tvec-different from camera coefficients
-                rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, Config.ArucoSize, mtx, dist)
+                if(Config.UseNewCameraMatrix == True):
+                    rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, Config.ArucoSize, newcameramtx, dist)
+                else:
+                    rvec, tvec ,_ = aruco.estimatePoseSingleMarkers(corners, Config.ArucoSize, mtx, dist)
 
                 # TODO: consider how accurate the center point is as below.....
                 # get the center of an Aruco Makers
-                if((rvec[0].shape == (1,3)) or (rvec[0].shape == (3,1))):
-                    inputObjPts = np.float32([[0.0,0.0,0.0]]).reshape(-1,3)
-                    imgpts, jac = cv2.projectPoints(inputObjPts, rvec[0], tvec[0], mtx, dist)
-                    centerPoint = tuple(imgpts[0][0])
-                    cv2.circle(color_image,centerPoint,1,(0,0,255), -1)
+
+                # should do something here using extracted aruco marker ids here
+                flagFindMainAruco = False
+                for idx in range(0, ids.size):
+                    if(ids[idx] == Config.MainMarkerID) or (ids[idx] == Config.TestMarkerID):
+                        if((rvec[idx].shape == (1,3)) or (rvec[idx].shape == (3,1))):
+                            inputObjPts = np.float32([[0.0,0.0,0.0]]).reshape(-1,3)
+                            imgpts, jac = cv2.projectPoints(inputObjPts, rvec[0], tvec[0], mtx, dist)
+                            centerPoint = tuple(imgpts[0][0])
+                            cv2.circle(color_image,centerPoint,1,(0,0,255), -1)                        
+
+                            # print 3D position using realsense SDK
+                            if(Config.UseHandEyePrint3DCoords == True):
+                                depth = aligned_depth_frame.get_distance(centerPoint[0], centerPoint[1])
+                                depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [centerPoint[0], centerPoint[1]], depth)
+                                print(str(depth_point) + str(' ') + str(tvec[0]))
+                            
+                            # find the main aruco marker 
+                            flagFindMainAruco = True
+
+                    if(Config.UseNewCameraMatrix == True):
+                        aruco.drawAxis(color_image, newcameramtx, dist, rvec[idx], tvec[idx], 0.03)
+                    else:
+                        aruco.drawAxis(color_image, mtx, dist, rvec[idx], tvec[idx], 0.03)
 
                 #(rvec-tvec).any() # get rid of that nasty numpy value array error
-
-                # draw axis for the aruco markers
-                for i in range(0, ids.size):
-                    aruco.drawAxis(color_image, mtx, dist, rvec[i], tvec[i], 0.03)
 
                 # draw a square around the markers
                 aruco.drawDetectedMarkers(color_image, corners)
 
                 # code to show ids of the marker found
-                strg = ''
-                for i in range(0, ids.size):
-                    strg += str(ids[i][0])+', '
+                # strg = ''
+                # for i in range(0, ids.size):
+                #     strg += str(ids[i][0])+', '
 
-                flagFindAruco = True
             else:
                 # code to show 'No Ids' when no markers are found
                 #cv2.putText(frame, "No Ids", (0,64), font, 1, (0,255,0),2,cv2.LINE_AA)
-                flagFindAruco = False
+                flagFindMainAruco = False
                 tvec = None
                 rvec = None
                 pass   
@@ -372,7 +412,7 @@ if __name__ == '__main__':
             # handle key inputs
             pressedKey = (cv2.waitKey(1) & 0xFF)
             if(pressedKey != 0xff):
-                exitFlag = keyEventHandler(pressedKey, flagFindAruco, color_image, tvec, rvec, mtx, dist, handeye)
+                exitFlag = keyEventHandler(pressedKey, flagFindMainAruco, color_image, tvec, rvec, mtx, dist, handeye)
                 if(exitFlag == True):
                     break
 

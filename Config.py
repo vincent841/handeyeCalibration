@@ -13,5 +13,9 @@ ArucoSize = 0.048
 
 # handeye calibration parameters
 UseHandEyeAlgorithmTest = False
-
+UseHandEyePrint3DCoords = False
+UseNewCameraMatrix = False
+HandEyeTargetZ = 0.10
+MainMarkerID = 2
+TestMarkerID = 14
 

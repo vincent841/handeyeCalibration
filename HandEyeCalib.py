@@ -18,6 +18,8 @@ class HandEyeCalibration:
         self.R_cam2gripper = []
         self.t_cam2gripper = []
 
+        self.AlgorithmTest = False
+
     #deperecated
     # Ref) https://stackoverflow.com/questions/27546081/determining-a-homogeneous-affine-transformation-matrix-from-six-points-in-3d-usi
     #      https://math.stackexchange.com/questions/222113/given-3-points-of-a-rigid-body-in-space-how-do-i-find-the-corresponding-orienta/222170#222170
@@ -96,8 +98,18 @@ class HandEyeCalibration:
         self.R_target2cam.append(hmCam[0:3, 0:3])
         self.t_target2cam.append(hmCam[0:3, 3])
 
+    def resetHandEyeInputs():
+        self.R_gripper2base.clear()
+        self.t_gripper2base.clear()
+        self.R_target2cam.clear()
+        self.t_target2cam.clear()
+
     def getHandEyeResultMatrixUsingOpenCV(self):
         methodHE = [cv2.CALIB_HAND_EYE_TSAI, cv2.CALIB_HAND_EYE_PARK, cv2.CALIB_HAND_EYE_HORAUD, cv2.CALIB_HAND_EYE_ANDREFF, cv2.CALIB_HAND_EYE_DANIILIDIS]
+
+        if(self.AlgorithmTest == True):
+            fsHandEyeTest = cv2.FileStorage("HandEyeTestData.xml", cv2.FILE_STORAGE_WRITE)
+            
         for mth in methodHE:
             self.R_cam2gripper, self.t_cam2gripper = cv2.calibrateHandEye(self.R_gripper2base, self.t_gripper2base, self.R_target2cam, self.t_target2cam, None, None, mth)
             # output results
@@ -110,24 +122,26 @@ class HandEyeCalibration:
             print("--------------------------------------")
 
             if(mth == cv2.CALIB_HAND_EYE_HORAUD):
-                for idx in range(len(self.R_gripper2base)):
-                    print("######")
-                    hmT2G = HMUtil.makeHM(self.R_cam2gripper, self.t_cam2gripper.T)
-                    hmG2B = HMUtil.makeHM(self.R_gripper2base[idx], self.t_gripper2base[idx].reshape(1,3))
-                    hmC2T = HMUtil.makeHM(self.R_target2cam[idx], self.t_target2cam[idx].reshape(1,3))
-                    #hmC2T = HMUtil.inverseHM(hmC2T) # test
-                    hmTransform = hmT2G
-                    #hmTransform = np.dot(hmG2B, hmT2G)
-                    #hmTransform = np.dot(hmTransform, hmC2T)
-                    print(hmTransform)
-                    hmTransform2 = np.dot(hmG2B, hmT2G)
-                    hmTransform2 = np.dot(hmTransform2, hmC2T)            
-                    print("Checkpoint #1: ")
-                    print(hmTransform2)
-                    print("Checkpoint #2: ")
-                    print(HMUtil.inverseHM(hmTransform2))
+                # for idx in range(len(self.R_gripper2base)):
+                #     print("######")
+                # make a homogeneous matrix from Target(Calibration) to Gripper(TCP)
+                hmT2G = HMUtil.makeHM(self.R_cam2gripper, self.t_cam2gripper.T)
+                # make a homogeneous matrix from Gripper(TCP) to Robot Base
+                hmG2B = HMUtil.makeHM(self.R_gripper2base[0], self.t_gripper2base[0].reshape(1,3))
+                # make a homogeneous matrix from Camera to Target(Target)
+                hmC2T = HMUtil.makeHM(self.R_target2cam[0], self.t_target2cam[0].reshape(1,3))
 
-        return hmTransform2
+                # Final HM(Camera to Robot Base)
+                # H(C2B) = H(G2B)H(T2G)H(C2T)
+                hmResultTransform = np.dot(hmG2B, hmT2G)
+                hmResultTransform = np.dot(hmResultTransform, hmC2T)            
+
+        if(self.AlgorithmTest == True):
+            fsHandEyeTest.release()          
+
+        print("Result Transform: ")
+        print(hmResultTransform)
+        return hmResultTransform
 
 
 ###############################################################################
