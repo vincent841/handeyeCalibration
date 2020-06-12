@@ -249,14 +249,15 @@ def keyEventHandler(pressedKey, flagAruco, color_image, tvec, rvec, mtx, dist, h
             print(xyzuvw)
 
             # test move to the destination
-            # currPos = indyGetTaskPose()
-            # [xc,yc,zc,uc,vc,wc] = currPos
+            currPos = indyGetTaskPose()
+            [xc,yc,zc,uc,vc,wc] = currPos
 
-            # [x,y,z,u,v,w] = xyzuvw
-            # xyzuvw = [x,y,z,uc,vc,wc]
-            # indy.task_move_to(xyzuvw)
+            [x,y,z,u,v,w] = xyzuvw
 
-
+            # indy7 base position to gripper position
+            xyzuvw = [x,y,z,u*(-1),v+180,w] 
+            print(xyzuvw)
+            indy.task_move_to(xyzuvw)
 
     return goExit
 
